@@ -17,5 +17,5 @@ MinimalModbus --> https://minimalmodbus.readthedocs.io/en/stable/readme.html
 
 Other documentaion can be found at this link:
 Weather Sensors Datasheets/Documentation --> https://drive.google.com/drive/u/1/folders/1Py-3WYEePmtlyG_yQctw7KpAPdwBNnvp
-  * If you cannot access this link, please request access to <b>coordinator_uw@avelaccess.org</b>*
+  * If you cannot access this link, please request access to <b>coordinator_uw@avelaccess.org</b>
 
