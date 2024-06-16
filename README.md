@@ -12,8 +12,12 @@ Hardware:
 - RS-485 / CAN Hatboard
 - External DC Power Supply (~10-30 V)
 
+
+
 In order to achieve the MODBUS communication between the RaspberryPi and the weather sensor, use the following library:
 MinimalModbus --> https://minimalmodbus.readthedocs.io/en/stable/readme.html
+
+
 
 Other documentaion can be found at this link:
 Weather Sensors Datasheets/Documentation --> https://drive.google.com/drive/u/1/folders/1Py-3WYEePmtlyG_yQctw7KpAPdwBNnvp
