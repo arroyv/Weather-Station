@@ -1,4 +1,6 @@
 '''
+  Author: Stephany Ayala-Cerna
+  
   modbus.py is a basic python script that shows how to use modbus to communicate with MODBUS RS-485 enabled 
   sensors.
 
