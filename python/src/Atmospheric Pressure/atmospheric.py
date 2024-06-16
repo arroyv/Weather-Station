@@ -1,3 +1,7 @@
+'''    
+    Author: Stephany Ayala-Cerna
+'''
+
 import minimalmodbus
 
 mb_address = 1
