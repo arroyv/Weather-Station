@@ -110,3 +110,75 @@ if __name__ == '__main__':
     create_db()
     threading.Thread(target=generate_random_data).start()
     socketio.run(app, host='0.0.0.0', port=5001, debug=False)
+
+
+
+
+
+# from flask import Flask, render_template, request, jsonify, make_response
+# from flask_sqlalchemy import SQLAlchemy
+# from flask_socketio import SocketIO
+# import threading
+# from sensor_polling import start_polling  # Adjust the import path if necessary
+
+# app = Flask(__name__)
+# app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///sensors.db'
+# db = SQLAlchemy(app)
+# socketio = SocketIO(app, async_mode='eventlet')
+
+# class SensorData(db.Model):
+#     id = db.Column(db.Integer, primary_key=True)
+#     sensor_name = db.Column(db.String(50), nullable=False)
+#     value = db.Column(db.Float, nullable=False)
+#     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+#     direction = db.Column(db.String(50), nullable=True)  # Optional column for wind direction
+
+# @app.route('/')
+# def index():
+#     sensors = ['pressure', 'temperature', 'co2', 'light_intensity', 'humidity', 'wind_speed']
+#     initial_data = {}
+#     for sensor in sensors:
+#         latest_data = SensorData.query.filter_by(sensor_name=sensor).order_by(SensorData.timestamp.desc()).first()
+#         if latest_data:
+#             initial_data[sensor] = {'value': latest_data.value, 'timestamp': latest_data.timestamp.isoformat(), 'unit': SENSOR_CONFIG[sensor]['unit']}
+#         else:
+#             initial_data[sensor] = {'value': 'N/A', 'timestamp': 'N/A', 'unit': SENSOR_CONFIG[sensor]['unit']}
+#     response = make_response(render_template('index.html', initial_data=initial_data))
+#     response.headers.add('Access-Control-Allow-Origin', '*')
+#     return response
+
+# @app.route('/sensor_data/<sensor_name>')
+# def sensor_data(sensor_name):
+#     end_time = datetime.utcnow()
+#     start_time = end_time - timedelta(days=365*10)  # Default to 10 years for all-time data
+#     time_range = request.args.get('range', 'all')
+    
+#     if time_range == 'day':
+#         start_time = end_time - timedelta(days=1)
+#     elif time_range == 'week':
+#         start_time = end_time - timedelta(weeks=1)
+#     elif time_range == 'month':
+#         start_time = end_time - timedelta(days=30)
+#     elif time_range == 'year':
+#         start_time = end_time - timedelta(days=365)
+    
+#     data = SensorData.query.filter(SensorData.sensor_name == sensor_name, SensorData.timestamp >= start_time).all()
+#     data_points = [{'timestamp': d.timestamp.isoformat(), 'value': d.value} for d in data]
+#     return jsonify(data_points)
+
+# @socketio.on('connect')
+# def handle_connect():
+#     print('Client connected')
+
+# @socketio.on('disconnect')
+# def handle_disconnect():
+#     print('Client disconnected')
+
+# def create_db():
+#     with app.app_context():
+#         db.create_all()
+
+# if __name__ == '__main__':
+#     create_db()
+#     start_polling(db, socketio)
+#     socketio.run(app, host='0.0.0.0', port=5001, debug=False)

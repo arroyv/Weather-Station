@@ -161,3 +161,126 @@
     </script>
 </body>
 </html>
+
+
+<!-- <!DOCTYPE html>
+<html>
+<head>
+    <title>Weather Monitoring Station</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.min.js"></script>
+    <style>
+        .sensor {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 40px;
+        }
+        .current-value {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        .graph {
+            flex-grow: 1;
+        }
+        .controls {
+            margin-bottom: 10px;
+        }
+        .controls button {
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Weather Monitoring Station</h1>
+    <div id="sensors"></div>
+    <script>
+        var initialData = {{ initial_data | tojson | safe }};
+        var sensors = Object.keys(initialData);
+        var socket = io();
+
+        sensors.forEach(function(sensor) {
+            var sensorDiv = document.createElement('div');
+            sensorDiv.className = 'sensor';
+            sensorDiv.id = sensor;
+
+            var currentValueDiv = document.createElement('div');
+            currentValueDiv.className = 'current-value';
+            currentValueDiv.id = sensor + '-value';
+            currentValueDiv.textContent = sensor.charAt(0).toUpperCase() + sensor.slice(1) + ': ' + initialData[sensor].value + ' ' + initialData[sensor].unit;
+
+            var controlsDiv = document.createElement('div');
+            controlsDiv.className = 'controls';
+            controlsDiv.innerHTML = `
+                <button onclick="loadData('${sensor}', 'day')">Day</button>
+                <button onclick="loadData('${sensor}', 'week')">Week</button>
+                <button onclick="loadData('${sensor}', 'month')">Month</button>
+                <button onclick="loadData('${sensor}', 'year')">Year</button>
+                <button onclick="loadData('${sensor}', 'all')">All Time</button>
+            `;
+
+            var graphDiv = document.createElement('div');
+            graphDiv.className = 'graph';
+            graphDiv.id = sensor + '-graph';
+
+            sensorDiv.appendChild(currentValueDiv);
+            sensorDiv.appendChild(controlsDiv);
+            sensorDiv.appendChild(graphDiv);
+            document.getElementById('sensors').appendChild(sensorDiv);
+
+            var data = [{
+                x: [],
+                y: [],
+                type: 'scatter',
+                mode: 'lines',
+                line: { width: 4 }
+            }];
+            var layout = {
+                title: sensor.charAt(0).toUpperCase() + sensor.slice(1) + ' Data',
+                xaxis: { title: 'Time' },
+                yaxis: { title: sensor.charAt(0).toUpperCase() + sensor.slice(1) + ' (' + initialData[sensor].unit + ')' }
+            };
+            Plotly.newPlot(graphDiv.id, data, layout);
+
+            // Load initial data with the default view (day)
+            loadData(sensor, 'day');
+        });
+
+        function loadData(sensor, range) {
+            fetch(`/sensor_data/${sensor}?range=${range}`)
+                .then(response => response.json())
+                .then(data => {
+                    var x = data.map(point => new Date(point.timestamp));
+                    var y = data.map(point => point.value);
+                    var update = {x: [x], y: [y]};
+                    Plotly.react(sensor + '-graph', [{
+                        x: x,
+                        y: y,
+                        type: 'scatter',
+                        mode: 'lines',
+                        line: { width: 4 }
+                    }], {
+                        title: sensor.charAt(0).toUpperCase() + sensor.slice(1) + ' Data (' + range + ')',
+                        xaxis: { title: 'Time' },
+                        yaxis: { title: sensor.charAt(0).toUpperCase() + sensor.slice(1) + ' (' + initialData[sensor].unit + ')' }
+                    });
+                });
+        }
+
+        socket.on('new_data', function(msg) {
+            var sensor = msg.sensor_name;
+            var value = msg.value;
+            var unit = msg.unit;
+
+            var currentValueDiv = document.getElementById(sensor + '-value');
+            currentValueDiv.textContent = sensor.charAt(0).toUpperCase() + sensor.slice(1) + ': ' + value + ' ' + unit;
+
+            var graphDiv = document.getElementById(sensor + '-graph');
+            var update = {
+                x: [[new Date()]],
+                y: [[value]]
+            };
+            Plotly.extendTraces(graphDiv.id, update, [0]);
+        });
+    </script>
+</body>
+</html> -->
