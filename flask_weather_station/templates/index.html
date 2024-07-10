@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Weather Monitoring Station</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.min.js"></script>
+    <style>
+        .sensor {
+            display: flex;
+            flex-direction: column;
+            margin-bottom: 40px;
+        }
+        .current-value {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        .graph {
+            flex-grow: 1;
+        }
+        .controls {
+            margin-bottom: 10px;
+        }
+        .controls button {
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Weather Monitoring Station</h1>
+    <div id="sensors"></div>
+    <script>
+        var initialData = {{ initial_data | tojson | safe }};
+        var sensors = ['pressure', 'temperature', 'co2', 'light_intensity', 'humidity', 'wind_speed'];
+        var units = {
+            'pressure': 'kPa',
+            'temperature': '°C',
+            'co2': 'ppm',
+            'light_intensity': 'Lux',
+            'humidity': '%RH',
+            'wind_speed': 'm/s'
+        };
+        var colors = {
+            'pressure': 'red',
+            'temperature': 'blue',
+            'co2': 'green',
+            'light_intensity': 'orange',
+            'humidity': 'purple',
+            'wind_speed': 'black'
+        };
+        var socket = io();
+
+        sensors.forEach(function(sensor) {
+            var sensorDiv = document.createElement('div');
+            sensorDiv.className = 'sensor';
+            sensorDiv.id = sensor;
+
+            var currentValueDiv = document.createElement('div');
+            currentValueDiv.className = 'current-value';
+            currentValueDiv.id = sensor + '-value';
+            var unit = units[sensor];
+            var initialValue = initialData[sensor]['value'] !== 'N/A' ? Math.round(initialData[sensor]['value']) : 'N/A';
+            var initialDirection = initialData[sensor]['direction'];
+            if (sensor == 'wind_speed') {
+                currentValueDiv.textContent = 'Wind Speed: ' + initialValue + ' ' + unit + ' (' + initialDirection + ')';
+            } else {
+                currentValueDiv.textContent = sensor.charAt(0).toUpperCase() + sensor.slice(1) + ': ' + initialValue + ' ' + unit;
+            }
+
+            var controlsDiv = document.createElement('div');
+            controlsDiv.className = 'controls';
+            controlsDiv.innerHTML = `
+                <button onclick="loadData('${sensor}', 'day')">Day</button>
+                <button onclick="loadData('${sensor}', 'week')">Week</button>
+                <button onclick="loadData('${sensor}', 'month')">Month</button>
+                <button onclick="loadData('${sensor}', 'year')">Year</button>
+                <button onclick="loadData('${sensor}', 'all')">All Time</button>
+            `;
+
+            var graphDiv = document.createElement('div');
+            graphDiv.className = 'graph';
+            graphDiv.id = sensor + '-graph';
+
+            sensorDiv.appendChild(currentValueDiv);
+            sensorDiv.appendChild(controlsDiv);
+            sensorDiv.appendChild(graphDiv);
+            document.getElementById('sensors').appendChild(sensorDiv);
+
+            var data = [{
+                x: [],
+                y: [],
+                type: 'scatter',
+                mode: 'lines',
+                line: { color: colors[sensor], width: 4 }
+            }];
+            var layout = {
+                title: sensor.charAt(0).toUpperCase() + sensor.slice(1) + ' Data',
+                xaxis: { title: 'Time' },
+                yaxis: { title: sensor.charAt(0).toUpperCase() + sensor.slice(1) + ' (' + unit + ')' }
+            };
+            Plotly.newPlot(graphDiv.id, data, layout);
+
+            // Load initial data with the default view (day)
+            loadData(sensor, 'day');
+        });
+
+        function loadData(sensor, range) {
+            fetch(`/sensor_data/${sensor}?range=${range}`)
+                .then(response => response.json())
+                .then(data => {
+                    var x = data.map(point => new Date(point.timestamp));
+                    var y = data.map(point => point.value);
+                    var update = {x: [x], y: [y]};
+                    var unit = units[sensor];
+                    var layout = {
+                        title: sensor.charAt(0).toUpperCase() + sensor.slice(1) + ' Data (' + range + ')',
+                        xaxis: { title: 'Time' },
+                        yaxis: { title: sensor.charAt(0).toUpperCase() + sensor.slice(1) + ' (' + unit + ')' }
+                    };
+                    if (sensor == 'wind_speed') {
+                        var directions = data.map(point => point.direction);
+                        update.text = directions.map(direction => `Direction: ${direction}`);
+                        update.mode = 'markers+text';
+                        layout.yaxis.title = 'Wind Speed (' + unit + ')';
+                    }
+                    Plotly.react(sensor + '-graph', [{
+                        x: x,
+                        y: y,
+                        type: 'scatter',
+                        mode: 'lines',
+                        line: { color: colors[sensor], width: 4 },
+                        text: sensor == 'wind_speed' ? update.text : undefined,
+                        textposition: 'top center'
+                    }], layout);
+                });
+        }
+
+        socket.on('new_data', function(msg) {
+            var sensor = msg.sensor_name;
+            var value = Math.round(msg.value);
+            var unit = units[sensor];
+
+            var currentValueDiv = document.getElementById(sensor + '-value');
+            if (sensor == 'wind_speed') {
+                var direction = msg.direction;
+                currentValueDiv.textContent = 'Wind Speed: ' + value + ' ' + unit + ' (' + direction + ')';
+            } else {
+                currentValueDiv.textContent = sensor.charAt(0).toUpperCase() + sensor.slice(1) + ': ' + value + ' ' + unit;
+            }
+
+            var graphDiv = document.getElementById(sensor + '-graph');
+            var update = {
+                x: [[new Date()]],
+                y: [[value]]
+            };
+            if (sensor == 'wind_speed') {
+                update.text = [[msg.direction]];
+                update.mode = 'markers+text';
+            }
+            Plotly.extendTraces(graphDiv.id, update, [0]);
+        });
+    </script>
+</body>
+</html>
