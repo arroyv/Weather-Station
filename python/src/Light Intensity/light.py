@@ -32,8 +32,3 @@ while (1):
     data =  sensor.read_register(6, 0, 3, False)
     # print(f"Raw Data is {data}")
     print(f"Light Intensity: {data} Lux")
-
-
-
-
-
