@@ -46,5 +46,3 @@ print("Requesting Data From Sensor...")
 
 data =  sensor.read_registers(0,1,3) # Starts at register 0 and reads 1 register using function code 3
 print(f"Raw Data is {data}")
-
-
