@@ -1,41 +1,33 @@
 '''    
-    Author: Stephany Ayala-Cerna
+    Author: Stephany Ayala-Cerna, Vicente Arroyos
 '''
-
 import minimalmodbus
+import time
 
-mb_address = 1
+# Configure the instrument
+instrument = minimalmodbus.Instrument('/dev/ttyACM0', 1)  # Replace with your serial port and address
+instrument.serial.baudrate = 4800  # Default baudrate from the document
+instrument.serial.bytesize = 8
+instrument.serial.parity = minimalmodbus.serial.PARITY_NONE
+instrument.serial.stopbits = 1
+instrument.serial.timeout = 1  # seconds
 
-sensor = minimalmodbus.Instrument('/dev/ttyS0', mb_address)
+# Function to read pressure and temperature
+def read_pressure_and_temperature():
+    try:
+        # Read atmospheric pressure from register 0x0000
+        pressure = instrument.read_register(0x0000, 1)  # 1 decimals, unsigned
+        print(f"Atmospheric Pressure: {pressure} Kpa")
 
-sensor.serial.baudrate = 4800
-sensor.serial.bytesize = 8
-sensor.serial.parity = minimalmodbus.serial.PARITY_NONE
-sensor.serial.stopbits = 1
-sensor.serial.timeout = 0.5
-sensor.mode = minimalmodbus.MODE_RTU
+        # Read temperature from register 0x0001 (signed value)
+        temperature = instrument.read_register(0x0001, 1, signed=True)  # 1 decimals, signed=True
+        print(f"Temperature: {temperature} °C")
 
-# sensor.clear_buffers_before_each_transaction = True
-# sensor.close_port_after_each_call = True
+    except IOError:
+        print("Failed to read from instrument")
 
-print("")
-print("Requesting Data From Sensor...")
-
-
-# Example of SINGLE Registers:
-# sensor.read_registers(REGISTER ADDRESS, NUMBER OF DECIMALS, FUNCTION CODE, IS VALUE SIGNED OR UNSIGNED (TRUE OR FASLSE))
-
-# Example of MULTIPLE Registers
-# sensor.read_registers(REGISTER START ADDRESS, NUMBER OF REGISTERS TO READ, FUNCTION CODE)
-while(1):
-    data =  sensor.read_registers(0,2,3)
-
-    # print(type(data[0])) # data type is 'int'
-    print("")
-    print("speed:")
-    print(f"Raw Data is {data}")
-    pressure = data[0] / 10 
-    temp = data[1] / 10 # FF9B H is --101 => -10.1 C
-    print(f"Pressure: {pressure} Kpa")
-    print(f"Tempurature: {temp} °C")
+# Continuously read and display pressure and temperature
+while True:
+    read_pressure_and_temperature()
+    time.sleep(2)  # Delay between readings
 
