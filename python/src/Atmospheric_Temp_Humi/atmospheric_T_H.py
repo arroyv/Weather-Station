@@ -1,3 +1,6 @@
+'''    
+    Author: Vicente Arroyos
+'''
 import minimalmodbus
 import time
 
