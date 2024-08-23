@@ -1,39 +1,29 @@
 '''
-  Author: Stephany Ayala-Cerna
+  Author: Stephany Ayala-Cerna, Vicente Arroyos
 '''
 
 import minimalmodbus
+import time
 
-mb_address = 1
+# Configure the instrument
+instrument = minimalmodbus.Instrument('/dev/ttyACM0', 1)  # Replace with your serial port and address
+instrument.serial.baudrate = 4800  # Default baudrate from the document
+instrument.serial.bytesize = 8
+instrument.serial.parity = minimalmodbus.serial.PARITY_NONE
+instrument.serial.stopbits = 1
+instrument.serial.timeout = 1  # seconds
 
-sensor = minimalmodbus.Instrument('/dev/ttyS0', mb_address)
+# Function to read wind speed
+def read_wind_speed():
+    try:
+        # Read wind speed from register 0x0000
+        wind_speed = instrument.read_register(0x0000, 1)  # 1 decimal place, unsigned
+        print(f"Wind Speed: {wind_speed} m/s")
 
-sensor.serial.baudrate = 4800
-sensor.serial.bytesize = 8
-sensor.serial.parity = minimalmodbus.serial.PARITY_NONE
-sensor.serial.stopbits = 1
-sensor.serial.timeout = 0.5
-sensor.mode = minimalmodbus.MODE_RTU
+    except IOError:
+        print("Failed to read from instrument")
 
-# sensor.clear_buffers_before_each_transaction = True
-# sensor.close_port_after_each_call = True
-
-print("")
-print("Requesting Data From Sensor...")
-
-
-# Example of SINGLE Registers:
-# sensor.read_registers(REGISTER ADDRESS, NUMBER OF DECIMALS, FUNCTION CODE, IS VALUE SIGNED OR UNSIGNED (TRUE OR FASLSE))
-
-# Example of MULTIPLE Registers
-# sensor.read_registers(REGISTER START ADDRESS, NUMBER OF REGISTERS TO READ, FUNCTION CODE)
-while(1):
-    data =  sensor.read_registers(0,1,3)
-
-    # print(type(data[0]))
-    print("")
-    print("speed:")
-    print(f"Raw Data is {data}")
-    convert = data[0] / 10
-    print(f"Sensor Speed {convert} m/s")
-
+# Continuously read and display wind speed
+while True:
+    read_wind_speed()
+    time.sleep(2)  # Delay between readings
