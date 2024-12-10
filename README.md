@@ -31,9 +31,9 @@ This project enables monitoring of environmental conditions using a Raspberry Pi
    python3 -m venv weather_station_env
    source weather_station_env/bin/activate
 
-## 2. Install Required Libraries
-    ```bash
-  pip install minimalmodbus Adafruit_IO
+2. **Install Required Libraries**
+   ```bash
+   pip install minimalmodbus Adafruit_IO
 
 ## Code Details
 
