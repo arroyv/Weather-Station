@@ -15,6 +15,7 @@ This project enables monitoring of environmental conditions using a Raspberry Pi
   - Light intensity
   - Wind direction and speed
 - **Power Supply**: Ensure sensors are powered as per manufacturer specifications.
+- External DC Power Supply (~10–30 V)
 
 ## Software Requirements
 
@@ -99,12 +100,6 @@ The script discovers connected sensors and starts collecting and logging data.
 
 - Validate register addresses and MODBUS parameters in the sensor documentation.
 - Use debugging flags (`debug=True`) for detailed logs.
-
-## Hardware
-
-- Raspberry Pi 4 or 5
-- RS-485 / CAN Hatboard
-- External DC Power Supply (~10–30 V)
 
 ## MODBUS Communication
 
