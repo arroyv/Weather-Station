@@ -50,7 +50,7 @@ def main():
         setup_gpio()
         print("Rain gauge monitoring started. Press Ctrl+C to exit.")
         while True:
-            time.sleep(10)  # Main thread sleeps; callback handles counting
+            time.sleep(2)  # Main thread sleeps; callback handles counting
 
             # Optionally, every 10 seconds, print cumulative rainfall:
             with lock:
