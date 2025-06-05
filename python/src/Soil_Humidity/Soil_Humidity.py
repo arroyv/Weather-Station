@@ -1,33 +1,104 @@
 '''
   Author: Stephany Ayala-Cerna, Vicente Arroyos
 '''
-#TODO figure out how to connect to soil sensor currenlty no functional
-
 import minimalmodbus
+import serial
 import time
+import sys
 
-# Configure the instrument
-instrument = minimalmodbus.Instrument('/dev/ttyACM0', 1)  # Replace with your serial port and address
-instrument.serial.baudrate = 4800  # Default baudrate from the document
-instrument.serial.bytesize = 8
-instrument.serial.parity = minimalmodbus.serial.PARITY_NONE
-instrument.serial.stopbits = 1
-instrument.serial.timeout = 1  # seconds
+# --------------------------------------------------------------------------------
+# 1) LIST OF CANDIDATE PORTS
+# --------------------------------------------------------------------------------
+ports = ['/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyACM2', '/dev/ttyACM3']
 
-# Function to read soil temperature and humidity
-def read_soil_temperature_and_humidity():
+# --------------------------------------------------------------------------------
+# 2) COMMON MODBUS PARAMETERS
+# --------------------------------------------------------------------------------
+SLAVE_ADDRESS = 1       # default Modbus ID for RS-WS-N01-TR
+BAUDRATE       = 4800   # default baud
+BYTESIZE       = 8
+PARITY         = serial.PARITY_NONE
+STOPBITS       = 2
+TIMEOUT        = 1      # seconds
+
+# Register addresses (per spec):
+REG_TEMPERATURE = 0  # signed 16-bit, tenths of °C
+REG_HUMIDITY    = 1  # unsigned 16-bit, tenths of %RH
+
+def try_open_port(port_name):
+    """
+    Attempt to create a minimalmodbus.Instrument on port_name and do a quick
+    read of register 0 (temperature). If it succeeds, return the Instrument
+    object. Otherwise, return None.
+    """
     try:
-        # Read soil temperature from register 0x0000
-        soil_temperature = instrument.read_register(0x0000, 1, signed=True)  # 1 decimal place, signed
-        print(f"Soil Temperature: {soil_temperature} °C") 
-        # Read soil humidity from register 0x0001
-        soil_humidity = instrument.read_register(0x0001, 1)  # 1 decimal place, unsigned
-        print(f"Soil Humidity: {soil_humidity} %RH")
+        inst = minimalmodbus.Instrument(port_name, SLAVE_ADDRESS)
+        inst.serial.baudrate = BAUDRATE
+        inst.serial.bytesize = BYTESIZE
+        inst.serial.parity   = PARITY
+        inst.serial.stopbits = STOPBITS
+        inst.serial.timeout  = TIMEOUT
+        inst.mode = minimalmodbus.MODE_RTU
 
-    except IOError:
-        print("Failed to read from instrument")
+        # Try reading temperature register once as a sanity check:
+        _ = inst.read_register(REG_TEMPERATURE, 0, signed=True)
+        return inst
 
-# Continuously read and display soil temperature and humidity
-while True:
-    read_soil_temperature_and_humidity()
-    time.sleep(2)  # Delay between readings
+    except Exception:
+        return None
+
+
+def find_working_instrument(port_list):
+    """
+    Loop through port_list, try to open each one. Return the first working
+    minimalmodbus.Instrument, or None if none succeed.
+    """
+    for p in port_list:
+        print(f"Trying {p} ...", end=' ')
+        inst = try_open_port(p)
+        if inst is not None:
+            print("OK")
+            return inst
+        else:
+            print("no response")
+    return None
+
+
+def read_temperature(inst):
+    raw = inst.read_register(REG_TEMPERATURE, 0, signed=True)
+    return raw / 10.0
+
+def read_humidity(inst):
+    raw = inst.read_register(REG_HUMIDITY, 0, signed=False)
+    return raw / 10.0
+
+
+if __name__ == '__main__':
+    print("Searching for RS-485 soil transmitter on candidate ports...")
+    instrument = find_working_instrument(ports)
+
+    if instrument is None:
+        print("\nERROR: Could not find a valid Modbus device on any of:")
+        for p in ports:
+            print("  ", p)
+        sys.exit(1)
+
+    print("\n==> Using port:", instrument.serial.port)
+    print("Starting polling loop (Ctrl+C to stop)...\n")
+
+    try:
+        while True:
+            try:
+                temp = read_temperature(instrument)
+                rh   = read_humidity(instrument)
+                timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
+                print(f"[{timestamp}]  Temperature: {temp:.1f} °C   Humidity: {rh:.1f} %RH")
+            except IOError as e:
+                print(f"IOError: {e!r}  (check wiring/baud/address)")
+            except ValueError as e:
+                print(f"ValueError (bad response?): {e!r}")
+
+            time.sleep(5)
+
+    except KeyboardInterrupt:
+        print("\nPolling stopped by user.")
