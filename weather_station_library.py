@@ -947,7 +947,7 @@ class RainGaugeSensor:
     def _bucket_tipped(self, c):
         with self._count_lock: self.tip_count += 1
     def _daily_reset_thread(self):
-        while not self._stop_event.wait((datetime.datetime.now() + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=1) - datetime.datetime.now()).total_seconds()):
+        while not self._stop_event.wait((datetime.datetime.now() + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=1) - datetime.datetime.now()).total_seconds():
             with self._count_lock: self.tip_count = 0
     def get_latest_value_and_feeds(self):
         with self._count_lock: return [(self.feed_name, round(self.tip_count * self.mm_per_tip, 2))]
