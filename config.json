@@ -52,7 +52,7 @@
   "rain_gauge": {
     "name": "rain",
     "gpio_pin": 17,
-    "gpio_chip": 0,
+    "gpio_chip": 4,
     "mm_per_tip": 0.2765,
     "debounce_ms": 250
   }
