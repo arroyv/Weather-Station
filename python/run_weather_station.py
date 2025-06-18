@@ -312,7 +312,7 @@
 
 
 
-# run_weather_station.py (Generalized)
+# run_weather_station.py
 
 import os
 import time
@@ -321,9 +321,10 @@ from Adafruit_IO import Client
 from threading import Lock
 import minimalmodbus
 
+# Import the library containing all our class definitions
 from weather_station_library import (
     WeatherStation,
-    ModbusSensor, # We now use a single generic Modbus class
+    ModbusSensor,
     RainGaugeSensor,
 )
 
@@ -342,70 +343,103 @@ aio = Client(ADAFRUIT_IO_USERNAME, ADAFRUIT_IO_KEY)
 
 
 # --- 2. Central HARDWARE Configuration ---
+# Station-wide settings
 UPLOAD_RATE = 5 * 60
 PRINT_RATE = 20 * 60
 INITIAL_DELAY = 5
 MIN_READ_GAP = 2
-PORTS_TO_SCAN = ['/dev/ttyACM0', '/dev/ttyACM1']
+
+# Modbus settings
+PORTS_TO_SCAN = ['/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyACM0']
 BAUDRATE = 4800
 TIMEOUT = 2
 
-# This config now drives everything about the Modbus sensors
+# This dictionary now defines ALL hardware-specific details, including calibration.
 SENSOR_CONFIG = {
     1: {
         "name": "soil",
         "polling_rate": 15 * 60,
         "metrics": {
-            "moisture":    {"register": 0, "decimals": 0, "signed": False},
-            "temperature": {"register": 1, "decimals": 1, "signed": True}
+            "moisture": {
+                "register": 0, "decimals": 0,
+                # Two-point calibration maps the sensor's raw output to a 0-100% scale.
+                # Find these values by testing your sensor in dry air and pure water.
+                "correction": {"type": "map", "raw_min": 310, "raw_max": 780}
+            },
+            "temperature": {
+                "register": 1, "decimals": 1, "signed": True,
+                # Linear correction: corrected = (raw * factor) + offset
+                # Example: Fixes a sensor that reads 0.5 degrees too low.
+                "correction": {"type": "linear", "offset": 0.5, "factor": 1.0}
+            }
         }
     },
     2: {
         "name": "atmosphere",
         "polling_rate": 10 * 60,
         "metrics": {
-            "humidity":    {"register": 0, "decimals": 1, "signed": False},
-            "temperature": {"register": 1, "decimals": 1, "signed": True}
+            "humidity": {
+                "register": 0, "decimals": 1,
+                # Example: Corrects for a sensor that consistently reads 5% too high.
+                "correction": {"type": "linear", "offset": -5.0}
+             },
+            "temperature": {
+                "register": 1, "decimals": 1, "signed": True,
+                # Example: Corrects a sensor that reads 1.1 degrees too high.
+                "correction": {"type": "linear", "offset": -1.1}
+            }
         }
     },
     3: {
         "name": "co2",
         "polling_rate": 5 * 60,
-        "metrics": {"level": {"register": 0, "decimals": 0}}
+        # No correction needed for this sensor, so the dictionary is empty.
+        "metrics": {"level": {"register": 0, "decimals": 0, "correction": {}}}
     },
     4: {
         "name": "light",
         "polling_rate": 5 * 60,
-        "metrics": {"intensity": {"register": 0, "function": "read_long"}}
+        "metrics": {
+            "intensity": {
+                "register": 0, "function": "read_long",
+                # Example: Apply a scaling factor if the sensor output needs conversion to a standard unit.
+                "correction": {"type": "linear", "factor": 1.25}
+            }
+        }
     },
     5: {
         "name": "pressure",
         "polling_rate": 10 * 60,
         "metrics": {
-            "level":       {"register": 0, "decimals": 2}, # Value in Pa, we want hPa, so divide by 100 -> 2 decimals
-            "temperature": {"register": 1, "decimals": 1, "signed": True}
+            # This sensor outputs Pascals (Pa), but we want to log hectopascals (hPa).
+            # 1 hPa = 100 Pa. A factor of 0.01 will do the conversion.
+            "level": {"register": 0, "decimals": 2, "correction": {"type": "linear", "factor": 0.01}},
+            "temperature": {"register": 1, "decimals": 1, "signed": True, "correction": {}}
         }
     },
-    6: {
+     6: {
         "name": "wind",
         "polling_rate": 2 * 60,
         "metrics": {
-            "direction": {"register": 0, "decimals": 0}, # Direction code 0-7
-            "speed":     {"register": 1, "decimals": 1}  # Speed in tenths of m/s
+            # No correction needed for direction code or speed
+            "direction": {"register": 0, "decimals": 0, "correction": {}},
+            "speed":     {"register": 1, "decimals": 1, "correction": {}}
         }
     },
 }
 
-# Configuration for the Rain Gauge
+# Configuration for the Rain Gauge. Update with your calibrated value.
 RAIN_GAUGE_CONFIG = {
     "name": "rain",
     "gpio_pin": 17,
-    "mm_per_tip": 0.2794,
+    "mm_per_tip": 0.2765, # Your calibrated value from manual testing
     "debounce_ms": 250
 }
 
-# --- 3. Sensor Discovery & Initialization ---
+
+# --- 3. Sensor Discovery & Main Execution ---
 def test_sensor(port, address):
+    """Tests for a sensor at a specific port and Modbus address."""
     try:
         inst = minimalmodbus.Instrument(port, address)
         inst.serial.baudrate = BAUDRATE
@@ -418,7 +452,7 @@ def test_sensor(port, address):
 if __name__ == "__main__":
     print("\n--- Starting Weather Station ---")
     
-    # Discover sensors
+    # Discover connected sensors
     print("\n--- Sensor Discovery ---")
     found_addresses = {}
     for port in PORTS_TO_SCAN:
@@ -430,7 +464,7 @@ if __name__ == "__main__":
                     found_addresses[addr] = port
     print("--- Discovery Finished ---\n")
 
-    # Initialize the station
+    # Initialize the station controller
     shared_port_lock = Lock()
     weather_station = WeatherStation(
         aio_client=aio,
@@ -438,26 +472,29 @@ if __name__ == "__main__":
         print_rate=PRINT_RATE
     )
 
-    # Add all discovered Modbus sensors
+    # Initialize and add all discovered Modbus sensors
     for addr, port in found_addresses.items():
         config = SENSOR_CONFIG[addr]
         feed_group = config["name"]
+        
+        # Automatically generate full feed names from the parts
         feed_names = [f"{ADAFRUIT_FEED_PREFIX}.{feed_group}-{metric}" for metric in config["metrics"]]
         
         sensor_instance = ModbusSensor(
             port=port,
             address=addr,
             feed_names=feed_names,
-            metric_configs=config["metrics"], # Pass the detailed metric config
+            metric_configs=config["metrics"], # Pass the detailed metric config with calibration
             polling_rate=config["polling_rate"],
             debug=True,
+            initial_delay=INITIAL_DELAY,
             lock=shared_port_lock,
             min_read_gap=MIN_READ_GAP,
             baudrate=BAUDRATE
         )
         weather_station.add_sensor(config["name"], sensor_instance)
 
-    # Add the Rain Gauge sensor
+    # Initialize and add the Rain Gauge sensor
     rain_feed_name = f"{ADAFRUIT_FEED_PREFIX}.{RAIN_GAUGE_CONFIG['name']}-total"
     rain_sensor = RainGaugeSensor(
         feed_name=rain_feed_name,
@@ -468,7 +505,7 @@ if __name__ == "__main__":
     )
     weather_station.add_sensor(RAIN_GAUGE_CONFIG["name"], rain_sensor)
 
-    # --- 4. Run Forever ---
+    # Run the station forever
     try:
         weather_station.start_all()
         print("\n--- Weather Station is Running --- (Press Ctrl+C to stop)")
