@@ -760,7 +760,7 @@ import sqlite3
 from threading import Thread, Event, Lock
 from Adafruit_IO import Data
 import minimalmodbus
-import pigpio
+import pigpio # Using the new, robust GPIO library
 
 # ============================================================================
 # DATA HANDLER PATTERN
@@ -833,10 +833,10 @@ class DataCacheHandler(DataHandler):
         with self._lock: return self._cache.copy()
 
 # ============================================================================
-# WEATHERSTATION CLASS (with config watcher)
+# WEATHERSTATION CLASS
 # ============================================================================
 class WeatherStation:
-    """Orchestrates sensors and dispatches data to registered handlers."""
+    # This class does not need any changes.
     def __init__(self, config_path='config.json'):
         self.sensors, self.handlers = {}, []
         self._stop_event = Event()
@@ -883,7 +883,6 @@ class WeatherStation:
                     try: handler.process(master_packet)
                     except Exception as e: print(f"  → ERROR: Handler {type(handler).__name__} failed: {e}")
             
-            # Use the latest upload_rate from the config
             upload_rate = self.config.get('upload_rate', 300)
             self._stop_event.wait(upload_rate)
 
@@ -903,8 +902,7 @@ class WeatherStation:
             if hasattr(sensor_obj, 'polling_rate'):
                 for conf in self.config['sensors'].values():
                     if conf['name'] == sensor_obj.name:
-                        sensor_obj.polling_rate = conf['polling_rate']
-                        sensor_obj.metric_configs = conf['metrics']
+                        sensor_obj.polling_rate, sensor_obj.metric_configs = conf['polling_rate'], conf['metrics']
                         print(f"    → Updated settings for sensor '{sensor_obj.name}'")
                         break
 
@@ -912,6 +910,7 @@ class WeatherStation:
 # SENSOR CLASSES
 # ============================================================================
 class ModbusSensor:
+    # This class does not need any changes
     def __init__(self, name, port, address, feed_names, metric_configs, polling_rate, **kwargs):
         self.name, self.feed_names, self.metric_configs, self.polling_rate = name, feed_names, metric_configs, polling_rate
         self.instrument = minimalmodbus.Instrument(port, address)
@@ -991,29 +990,22 @@ class RainGaugeSensor:
             print(f"  [RainGauge] ERROR: Could not connect to pigpio daemon. Is it running? Run 'sudo systemctl start pigpiod'")
             return
 
-        # Set up the GPIO pin as an input with an internal pull-up resistor
         self.pi.set_mode(self.gpio_pin, pigpio.INPUT)
         self.pi.set_pull_up_down(self.gpio_pin, pigpio.PUD_UP)
-
-        # Create the callback. The pigpio daemon will watch the pin and call our function when it changes.
         self.callback_handler = self.pi.callback(self.gpio_pin, pigpio.FALLING_EDGE, self._pi_callback)
-        # Set the debounce period directly on the pin
         self.pi.set_glitch_filter(self.gpio_pin, self.debounce_us)
 
-
-        # Start the thread that resets the count daily
         Thread(target=self._daily_reset_thread, daemon=True).start()
 
     def stop(self):
         if self.debug: print("  Stopping RainGaugeSensor...")
         self._stop_event.set()
         if self.callback_handler:
-            self.callback_handler.cancel()  # Cleanly stop the callback
+            self.callback_handler.cancel()
         if self.pi.connected:
-            self.pi.stop()  # Disconnect from the pigpio daemon
+            self.pi.stop()
 
     def _pi_callback(self, gpio, level, tick):
-        """This function is called by the pigpio daemon on every tip."""
         # The glitch filter handles debouncing, so we just count the tip.
         with self._count_lock:
             self.tip_count += 1
@@ -1021,23 +1013,16 @@ class RainGaugeSensor:
                 print(f"  [Tipped!] Rain gauge on GPIO {self.gpio_pin}. Total today: {self.tip_count}")
 
     def _daily_reset_thread(self):
-        """This thread sleeps until midnight, then resets the daily tip count."""
         while not self._stop_event.is_set():
             now = datetime.datetime.now()
             next_midnight = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=1, microsecond=0)
-            
-            # Use the event's wait method for a non-blocking sleep that can be interrupted
             if self._stop_event.wait((next_midnight - now).total_seconds()):
-                # Exit if stop() was called during sleep
                 break
-
             with self._count_lock:
                 self.tip_count = 0
                 if self.debug:
                     print(f"  [RainGauge] Daily tip count reset for GPIO {self.gpio_pin}.")
 
     def get_latest_value_and_feeds(self):
-        """Provides the current data to the WeatherStation dispatcher."""
         with self._count_lock:
-            # The metric name for the handler is 'total'
-            return [(f"{self.feed_name}-total", round(self.tip_count * self.mm_per_tip, 2))]
+            return [(f"{self.feed_name}", round(self.tip_count * self.mm_per_tip, 2))]
