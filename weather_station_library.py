@@ -529,221 +529,425 @@
 
 
 
+# # weather_station_library.py
+
+# import minimalmodbus
+# import time
+# import datetime
+# from threading import Thread, Event, Lock
+# from Adafruit_IO import Data
+# import RPi.GPIO as GPIO
+
+# # ============================================================================
+# # GENERIC MODBUS SENSOR CLASS
+# # ============================================================================
+# class ModbusSensor:
+#     """A single, generic class for all Modbus sensors configured via dictionaries."""
+#     def __init__(self, port, address, feed_names, metric_configs, polling_rate=60, debug=False, lock=None, **kwargs):
+#         # Setup minimalmodbus instrument
+#         self.instrument = minimalmodbus.Instrument(port, address)
+#         for key, value in kwargs.items():
+#             if key not in ['initial_delay', 'min_read_gap']: # Filter out non-serial kwargs
+#                 setattr(self.instrument.serial, key, value)
+#         self.instrument.mode = minimalmodbus.MODE_RTU
+
+#         self.feed_names = feed_names
+#         self.metric_configs = metric_configs
+#         self.polling_rate = polling_rate
+#         self.debug = debug
+#         self.shared_port_lock = lock or Lock()
+#         self.initial_delay = kwargs.get('initial_delay', 2)
+#         self.min_read_gap = kwargs.get('min_read_gap', 2)
+#         self.last_read_time = 0
+        
+#         self._stop_event = Event()
+#         self.latest_values = None
+#         self._value_lock = Lock()
+
+#     def start(self):
+#         if self.debug:
+#             print(f"Starting poller for Modbus sensor (addr {self.instrument.address}) -> every {self.polling_rate}s.")
+#         Thread(target=self._poll, daemon=True).start()
+
+#     def stop(self):
+#         self._stop_event.set()
+
+#     def _apply_correction(self, raw_value, config):
+#         """Applies calibration corrections based on the metric's config dictionary."""
+#         if "correction" not in config or not config["correction"]:
+#             return raw_value
+
+#         corr_config = config["correction"]
+#         corr_type = corr_config.get("type", "linear")
+
+#         if corr_type == "linear":
+#             offset = corr_config.get("offset", 0.0)
+#             factor = corr_config.get("factor", 1.0)
+#             corrected_value = (raw_value * factor) + offset
+#             if self.debug: print(f"    Linear Correction: ({raw_value} * {factor}) + {offset} -> {corrected_value:.2f}")
+#             return corrected_value
+
+#         elif corr_type == "map":
+#             raw_min = corr_config.get("raw_min", 0)
+#             raw_max = corr_config.get("raw_max", 1023)
+            
+#             clamped_raw = max(raw_min, min(raw_value, raw_max))
+#             if (raw_max - raw_min) == 0: return 50.0
+            
+#             percent = (clamped_raw - raw_min) * 100.0 / (raw_max - raw_min)
+#             if self.debug: print(f"    Map Correction: {raw_value} -> {clamped_raw} -> {percent:.2f}%")
+#             return percent
+
+#         return raw_value
+
+#     def _poll(self):
+#         time.sleep(self.initial_delay)
+#         while not self._stop_event.is_set():
+#             now = time.time()
+#             if now - self.last_read_time >= self.min_read_gap:
+#                 values = []
+#                 with self.shared_port_lock:
+#                     self.last_read_time = now
+#                     try:
+#                         for metric, config in self.metric_configs.items():
+#                             read_function_name = config.get("function", "read_register")
+#                             read_function = getattr(self.instrument, read_function_name)
+                            
+#                             raw_value = read_function(
+#                                 registeraddress=config["register"],
+#                                 numberOfDecimals=config.get("decimals", 0),
+#                                 signed=config.get("signed", False)
+#                             )
+                            
+#                             corrected_value = self._apply_correction(raw_value, config)
+#                             values.append(corrected_value)
+                        
+#                         if self.debug: print(f"  [Read OK] Addr {self.instrument.address}: Corrected values -> {values}")
+#                         with self._value_lock:
+#                             self.latest_values = values
+
+#                     except (IOError, ValueError) as e:
+#                         print(f"ERROR: Failed to read sensor at address {self.instrument.address}: {e}")
+            
+#             self._stop_event.wait(self.polling_rate)
+
+#     def get_latest_value_and_feeds(self):
+#         with self._value_lock:
+#             if self.latest_values is None:
+#                 return []
+#             # Round values to 2 decimal places for clean logging
+#             rounded_values = [round(v, 2) for v in self.latest_values]
+#             return list(zip(self.feed_names, rounded_values))
+
+# # ============================================================================
+# # INTERRUPT-BASED SENSOR (Rain Gauge)
+# # ============================================================================
+# class RainGaugeSensor:
+#     """A generic Rain Gauge class configured via parameters."""
+#     def __init__(self, feed_name, gpio_pin, mm_per_tip, debounce_ms=250, debug=False):
+#         self.feed_name = feed_name
+#         self.gpio_pin = gpio_pin
+#         self.mm_per_tip = mm_per_tip
+#         self.debounce_ms = debounce_ms
+#         self.debug = debug
+        
+#         self.tip_count_since_reset = 0
+#         self._count_lock = Lock()
+#         self._stop_event = Event()
+
+#     def _bucket_tipped(self, channel):
+#         with self._count_lock:
+#             self.tip_count_since_reset += 1
+#             if self.debug:
+#                 print(f"  [Tipped!] Rain gauge on GPIO {self.gpio_pin}. Total today: {self.tip_count_since_reset}")
+
+#     def start(self):
+#         if self.debug: print(f"Starting RainGaugeSensor on GPIO {self.gpio_pin}...")
+#         GPIO.setmode(GPIO.BCM)
+#         GPIO.setup(self.gpio_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+#         GPIO.add_event_detect(self.gpio_pin, GPIO.FALLING, callback=self._bucket_tipped, bouncetime=self.debounce_ms)
+#         Thread(target=self._daily_reset_thread, daemon=True).start()
+
+#     def stop(self):
+#         self._stop_event.set()
+#         GPIO.cleanup(self.gpio_pin)
+
+#     def _daily_reset_thread(self):
+#         while not self._stop_event.is_set():
+#             now = datetime.datetime.now()
+#             next_midnight = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=1, microsecond=0)
+#             if self._stop_event.wait((next_midnight - now).total_seconds()):
+#                 break
+#             with self._count_lock:
+#                 self.tip_count_since_reset = 0
+#                 if self.debug: print(f"  [RainGauge] Daily tip count reset to 0 for GPIO {self.gpio_pin}.")
+
+#     def get_latest_value_and_feeds(self):
+#         with self._count_lock:
+#             rainfall_mm = self.tip_count_since_reset * self.mm_per_tip
+#         return [(self.feed_name, round(rainfall_mm, 2))]
+
+# # ============================================================================
+# # CENTRAL WEATHER STATION CONTROLLER
+# # ============================================================================
+# class WeatherStation:
+#     """Orchestrates all sensors and handles data aggregation and uploading."""
+#     def __init__(self, aio_client, upload_rate=300, print_rate=1200, **kwargs):
+#         self.sensors = {}
+#         self.aio_client = aio_client
+#         self.upload_rate = upload_rate
+#         self.print_rate = print_rate
+#         self.print_to_terminal_flag = kwargs.get("print_to_terminal_flag", True)
+#         self._stop_event = Event()
+
+#     def add_sensor(self, name, sensor):
+#         self.sensors[name] = sensor
+
+#     def start_all(self):
+#         print("Starting all sensor threads...")
+#         for sensor in self.sensors.values():
+#             sensor.start()
+        
+#         print(f"Starting central data uploader (uploads every {self.upload_rate}s)...")
+#         Thread(target=self._data_aggregator_loop, daemon=True).start()
+
+#     def stop_all(self):
+#         self._stop_event.set()
+#         for sensor in self.sensors.values():
+#             sensor.stop()
+
+#     def _data_aggregator_loop(self):
+#         last_print_time = 0
+#         self._stop_event.wait(10)
+
+#         while not self._stop_event.is_set():
+#             all_data_for_upload = []
+#             all_data_for_print = {}
+
+#             for name, sensor in self.sensors.items():
+#                 sensor_data = sensor.get_latest_value_and_feeds()
+#                 if sensor_data:
+#                     all_data_for_upload.extend(sensor_data)
+#                     all_data_for_print[name] = {item[0].split('.')[-1]: item[1] for item in sensor_data}
+
+#             if all_data_for_upload:
+#                 print(f"\n{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: Aggregated data from {len(all_data_for_print)} sensor(s).")
+#                 try:
+#                     data_to_send = [Data(feed_id=item[0], value=item[1]) for item in all_data_for_upload]
+#                     self.aio_client.send_batch_data(data_to_send)
+#                     print("  → Batch data sent successfully to Adafruit IO.")
+#                 except Exception as e:
+#                     print(f"  → ERROR: Failed to send batch data: {e}")
+            
+#             if self.print_to_terminal_flag and (time.time() - last_print_time >= self.print_rate):
+#                 print("\n--- Weather Station Status Summary ---")
+#                 for name, data in sorted(all_data_for_print.items()):
+#                     print(f"  {name:<15}: {data}")
+#                 print("--------------------------------------\n")
+#                 last_print_time = time.time()
+            
+#             self._stop_event.wait(self.upload_rate)
+
 # weather_station_library.py
 
-import minimalmodbus
+import os
 import time
 import datetime
+import json
+import sqlite3
 from threading import Thread, Event, Lock
 from Adafruit_IO import Data
+import minimalmodbus
 import RPi.GPIO as GPIO
 
 # ============================================================================
-# GENERIC MODBUS SENSOR CLASS
+# DATA HANDLER PATTERN
+# ============================================================================
+class DataHandler:
+    def process(self, data_packet): raise NotImplementedError
+    def start(self): pass
+    def stop(self): pass
+
+class AdafruitIOHandler(DataHandler):
+    def __init__(self, aio_client, feed_prefix):
+        self.aio_client, self.feed_prefix = aio_client, feed_prefix
+    def process(self, data_packet):
+        print(f"  [AdafruitIOHandler] Preparing batch upload...")
+        data_to_send = []
+        for sensor, metrics in data_packet.items():
+            for metric, value in metrics.items():
+                feed_id = f"{self.feed_prefix}.{sensor}-{metric}"
+                data_to_send.append(Data(feed_id=feed_id, value=value))
+        if data_to_send:
+            try:
+                self.aio_client.send_batch_data(data_to_send)
+                print(f"  [AdafruitIOHandler]   → Batch data sent successfully.")
+            except Exception as e:
+                print(f"  [AdafruitIOHandler]   → ERROR: {e}")
+
+class SQLiteHandler(DataHandler):
+    def __init__(self, db_path):
+        self.db_path, self.conn = db_path, None
+    def start(self):
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        self.conn.cursor().execute('''
+            CREATE TABLE IF NOT EXISTS readings (
+                timestamp TEXT NOT NULL, sensor TEXT NOT NULL,
+                metric TEXT NOT NULL, value REAL NOT NULL,
+                PRIMARY KEY (timestamp, sensor, metric))''')
+        self.conn.commit()
+        print(f"  [SQLiteHandler] Connected to database at {self.db_path}")
+    def stop(self):
+        if self.conn: self.conn.close(); print("  [SQLiteHandler] Database connection closed.")
+    def process(self, data_packet):
+        print(f"  [SQLiteHandler] Writing to database...")
+        ts = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        insert_data = [(ts, s, m, v) for s, mets in data_packet.items() for m, v in mets.items()]
+        try:
+            cur = self.conn.cursor()
+            cur.executemany("INSERT INTO readings VALUES (?, ?, ?, ?)", insert_data)
+            self.conn.commit()
+            print(f"  [SQLiteHandler]   → Wrote {len(insert_data)} records.")
+        except sqlite3.Error as e:
+            print(f"  [SQLiteHandler]   → ERROR: {e}")
+
+class DataCacheHandler(DataHandler):
+    def __init__(self):
+        self._cache, self._lock = {}, Lock()
+        print("  [DataCacheHandler] In-memory cache initialized.")
+    def process(self, data_packet):
+        with self._lock:
+            self._cache['timestamp'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            self._cache['sensors'] = data_packet
+        print(f"  [DataCacheHandler]   → Latest data cached.")
+    def get_latest_data(self):
+        with self._lock: return self._cache.copy()
+
+# ============================================================================
+# WEATHERSTATION CLASS (with config watcher)
+# ============================================================================
+class WeatherStation:
+    def __init__(self, config_path='config.json'):
+        self.sensors, self.handlers = {}, []
+        self._stop_event = Event()
+        self.config_path = config_path
+        self.last_config_mtime = 0
+        self.config = {}
+
+    def add_sensor(self, name, sensor): self.sensors[name] = sensor
+    def add_handler(self, handler): self.handlers.append(handler)
+
+    def load_config(self):
+        print("  [Config] Loading configuration...")
+        with open(self.config_path, 'r') as f: self.config = json.load(f)
+        self.last_config_mtime = os.path.getmtime(self.config_path)
+        return self.config
+
+    def start_all(self):
+        print("\n--- Starting All Services ---")
+        for handler in self.handlers: handler.start()
+        for sensor in self.sensors.values(): sensor.start()
+        Thread(target=self._data_dispatcher_loop, daemon=True).start()
+        Thread(target=self._config_watcher_loop, daemon=True).start()
+
+    def stop_all(self):
+        self._stop_event.set()
+        for sensor in self.sensors.values(): sensor.stop()
+        for handler in self.handlers: handler.stop()
+
+    def _data_dispatcher_loop(self):
+        upload_rate = self.config.get('upload_rate', 300)
+        self._stop_event.wait(10)
+        while not self._stop_event.is_set():
+            master_packet = {name: {m.split('-')[-1]: v for f, (m, v) in zip(s.feed_names, s.get_latest_value_and_feeds())} for name, s in self.sensors.items() if s.get_latest_value_and_feeds()}
+            if master_packet:
+                print(f"\n{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: Dispatching data...")
+                for handler in self.handlers:
+                    try: handler.process(master_packet)
+                    except Exception as e: print(f"  → ERROR: Handler {type(handler).__name__} failed: {e}")
+            self._stop_event.wait(upload_rate)
+
+    def _config_watcher_loop(self):
+        while not self._stop_event.is_set():
+            try:
+                mtime = os.path.getmtime(self.config_path)
+                if mtime > self.last_config_mtime:
+                    print("\n  [ConfigWatcher] Detected config change. Reloading...")
+                    self.reload_config()
+            except OSError as e: print(f"  [ConfigWatcher] ERROR: {e}")
+            self._stop_event.wait(30)
+            
+    def reload_config(self):
+        self.config = self.load_config()
+        # Update running sensor objects with new settings
+        for sensor_obj in self.sensors.values():
+            if hasattr(sensor_obj, 'polling_rate'):
+                for conf in self.config['sensors'].values():
+                    if conf['name'] == sensor_obj.name:
+                        sensor_obj.polling_rate = conf['polling_rate']
+                        sensor_obj.metric_configs = conf['metrics']
+                        print(f"    → Updated settings for sensor '{sensor_obj.name}'")
+                        break
+
+# ============================================================================
+# SENSOR CLASSES (Unchanged)
 # ============================================================================
 class ModbusSensor:
-    """A single, generic class for all Modbus sensors configured via dictionaries."""
-    def __init__(self, port, address, feed_names, metric_configs, polling_rate=60, debug=False, lock=None, **kwargs):
-        # Setup minimalmodbus instrument
+    def __init__(self, name, port, address, feed_names, metric_configs, polling_rate, **kwargs):
+        self.name, self.feed_names, self.metric_configs, self.polling_rate = name, feed_names, metric_configs, polling_rate
         self.instrument = minimalmodbus.Instrument(port, address)
-        for key, value in kwargs.items():
-            if key not in ['initial_delay', 'min_read_gap']: # Filter out non-serial kwargs
-                setattr(self.instrument.serial, key, value)
-        self.instrument.mode = minimalmodbus.MODE_RTU
-
-        self.feed_names = feed_names
-        self.metric_configs = metric_configs
-        self.polling_rate = polling_rate
-        self.debug = debug
-        self.shared_port_lock = lock or Lock()
+        # ... (rest of init is the same)
+        self.debug = kwargs.get('debug', False)
+        self.shared_port_lock = kwargs.get('lock', Lock())
         self.initial_delay = kwargs.get('initial_delay', 2)
         self.min_read_gap = kwargs.get('min_read_gap', 2)
-        self.last_read_time = 0
-        
-        self._stop_event = Event()
-        self.latest_values = None
-        self._value_lock = Lock()
+        self.last_read_time, self._stop_event, self.latest_values, self._value_lock = 0, Event(), None, Lock()
 
     def start(self):
-        if self.debug:
-            print(f"Starting poller for Modbus sensor (addr {self.instrument.address}) -> every {self.polling_rate}s.")
+        if self.debug: print(f"  Starting poller for '{self.name}' (addr {self.instrument.address})")
         Thread(target=self._poll, daemon=True).start()
-
     def stop(self):
+        if self.debug: print(f"  Stopping poller for '{self.name}'...")
         self._stop_event.set()
 
-    def _apply_correction(self, raw_value, config):
-        """Applies calibration corrections based on the metric's config dictionary."""
-        if "correction" not in config or not config["correction"]:
-            return raw_value
-
-        corr_config = config["correction"]
-        corr_type = corr_config.get("type", "linear")
-
-        if corr_type == "linear":
-            offset = corr_config.get("offset", 0.0)
-            factor = corr_config.get("factor", 1.0)
-            corrected_value = (raw_value * factor) + offset
-            if self.debug: print(f"    Linear Correction: ({raw_value} * {factor}) + {offset} -> {corrected_value:.2f}")
-            return corrected_value
-
-        elif corr_type == "map":
-            raw_min = corr_config.get("raw_min", 0)
-            raw_max = corr_config.get("raw_max", 1023)
-            
-            clamped_raw = max(raw_min, min(raw_value, raw_max))
-            if (raw_max - raw_min) == 0: return 50.0
-            
-            percent = (clamped_raw - raw_min) * 100.0 / (raw_max - raw_min)
-            if self.debug: print(f"    Map Correction: {raw_value} -> {clamped_raw} -> {percent:.2f}%")
-            return percent
-
-        return raw_value
+    def _apply_correction(self, raw, config):
+        if not config.get("correction"): return raw
+        c = config["correction"]
+        if c.get("type") == "map": return (max(c["raw_min"], min(raw, c["raw_max"])) - c["raw_min"]) * 100 / (c["raw_max"] - c["raw_min"])
+        return (raw * c.get("factor", 1.0)) + c.get("offset", 0.0)
 
     def _poll(self):
         time.sleep(self.initial_delay)
         while not self._stop_event.is_set():
-            now = time.time()
-            if now - self.last_read_time >= self.min_read_gap:
-                values = []
+            if time.time() - self.last_read_time >= self.min_read_gap:
                 with self.shared_port_lock:
-                    self.last_read_time = now
+                    self.last_read_time = time.time()
                     try:
-                        for metric, config in self.metric_configs.items():
-                            read_function_name = config.get("function", "read_register")
-                            read_function = getattr(self.instrument, read_function_name)
-                            
-                            raw_value = read_function(
-                                registeraddress=config["register"],
-                                numberOfDecimals=config.get("decimals", 0),
-                                signed=config.get("signed", False)
-                            )
-                            
-                            corrected_value = self._apply_correction(raw_value, config)
-                            values.append(corrected_value)
-                        
-                        if self.debug: print(f"  [Read OK] Addr {self.instrument.address}: Corrected values -> {values}")
-                        with self._value_lock:
-                            self.latest_values = values
-
-                    except (IOError, ValueError) as e:
-                        print(f"ERROR: Failed to read sensor at address {self.instrument.address}: {e}")
-            
+                        values = [self._apply_correction(getattr(self.instrument, c.get("function", "read_register"))(c["register"], c.get("decimals", 0), c.get("signed", False)), c) for c in self.metric_configs.values()]
+                        with self._value_lock: self.latest_values = values
+                    except (IOError, ValueError) as e: print(f"ERROR: Read failed for '{self.name}': {e}")
             self._stop_event.wait(self.polling_rate)
 
     def get_latest_value_and_feeds(self):
         with self._value_lock:
-            if self.latest_values is None:
-                return []
-            # Round values to 2 decimal places for clean logging
-            rounded_values = [round(v, 2) for v in self.latest_values]
-            return list(zip(self.feed_names, rounded_values))
+            if self.latest_values is None: return []
+            return list(zip(self.feed_names, [round(v, 2) for v in self.latest_values]))
 
-# ============================================================================
-# INTERRUPT-BASED SENSOR (Rain Gauge)
-# ============================================================================
 class RainGaugeSensor:
-    """A generic Rain Gauge class configured via parameters."""
-    def __init__(self, feed_name, gpio_pin, mm_per_tip, debounce_ms=250, debug=False):
-        self.feed_name = feed_name
-        self.gpio_pin = gpio_pin
-        self.mm_per_tip = mm_per_tip
-        self.debounce_ms = debounce_ms
-        self.debug = debug
-        
-        self.tip_count_since_reset = 0
-        self._count_lock = Lock()
-        self._stop_event = Event()
-
-    def _bucket_tipped(self, channel):
-        with self._count_lock:
-            self.tip_count_since_reset += 1
-            if self.debug:
-                print(f"  [Tipped!] Rain gauge on GPIO {self.gpio_pin}. Total today: {self.tip_count_since_reset}")
-
+    def __init__(self, name, feed_name, gpio_pin, mm_per_tip, **kwargs):
+        self.name, self.feed_name, self.gpio_pin, self.mm_per_tip = name, feed_name, gpio_pin, mm_per_tip
+        self.debounce_ms, self.debug = kwargs.get('debounce_ms', 250), kwargs.get('debug', False)
+        self.tip_count, self._count_lock, self._stop_event = 0, Lock(), Event()
     def start(self):
-        if self.debug: print(f"Starting RainGaugeSensor on GPIO {self.gpio_pin}...")
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self.gpio_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        if self.debug: print(f"  Starting RainGauge on GPIO {self.gpio_pin}...")
+        GPIO.setmode(GPIO.BCM); GPIO.setup(self.gpio_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.add_event_detect(self.gpio_pin, GPIO.FALLING, callback=self._bucket_tipped, bouncetime=self.debounce_ms)
         Thread(target=self._daily_reset_thread, daemon=True).start()
-
-    def stop(self):
-        self._stop_event.set()
-        GPIO.cleanup(self.gpio_pin)
-
+    def stop(self): self._stop_event.set(); GPIO.cleanup(self.gpio_pin)
+    def _bucket_tipped(self, c):
+        with self._count_lock: self.tip_count += 1
     def _daily_reset_thread(self):
-        while not self._stop_event.is_set():
-            now = datetime.datetime.now()
-            next_midnight = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=1, microsecond=0)
-            if self._stop_event.wait((next_midnight - now).total_seconds()):
-                break
-            with self._count_lock:
-                self.tip_count_since_reset = 0
-                if self.debug: print(f"  [RainGauge] Daily tip count reset to 0 for GPIO {self.gpio_pin}.")
-
+        while not self._stop_event.wait((datetime.datetime.now() + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=1) - datetime.datetime.now()).total_seconds()):
+            with self._count_lock: self.tip_count = 0
     def get_latest_value_and_feeds(self):
-        with self._count_lock:
-            rainfall_mm = self.tip_count_since_reset * self.mm_per_tip
-        return [(self.feed_name, round(rainfall_mm, 2))]
-
-# ============================================================================
-# CENTRAL WEATHER STATION CONTROLLER
-# ============================================================================
-class WeatherStation:
-    """Orchestrates all sensors and handles data aggregation and uploading."""
-    def __init__(self, aio_client, upload_rate=300, print_rate=1200, **kwargs):
-        self.sensors = {}
-        self.aio_client = aio_client
-        self.upload_rate = upload_rate
-        self.print_rate = print_rate
-        self.print_to_terminal_flag = kwargs.get("print_to_terminal_flag", True)
-        self._stop_event = Event()
-
-    def add_sensor(self, name, sensor):
-        self.sensors[name] = sensor
-
-    def start_all(self):
-        print("Starting all sensor threads...")
-        for sensor in self.sensors.values():
-            sensor.start()
-        
-        print(f"Starting central data uploader (uploads every {self.upload_rate}s)...")
-        Thread(target=self._data_aggregator_loop, daemon=True).start()
-
-    def stop_all(self):
-        self._stop_event.set()
-        for sensor in self.sensors.values():
-            sensor.stop()
-
-    def _data_aggregator_loop(self):
-        last_print_time = 0
-        self._stop_event.wait(10)
-
-        while not self._stop_event.is_set():
-            all_data_for_upload = []
-            all_data_for_print = {}
-
-            for name, sensor in self.sensors.items():
-                sensor_data = sensor.get_latest_value_and_feeds()
-                if sensor_data:
-                    all_data_for_upload.extend(sensor_data)
-                    all_data_for_print[name] = {item[0].split('.')[-1]: item[1] for item in sensor_data}
-
-            if all_data_for_upload:
-                print(f"\n{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: Aggregated data from {len(all_data_for_print)} sensor(s).")
-                try:
-                    data_to_send = [Data(feed_id=item[0], value=item[1]) for item in all_data_for_upload]
-                    self.aio_client.send_batch_data(data_to_send)
-                    print("  → Batch data sent successfully to Adafruit IO.")
-                except Exception as e:
-                    print(f"  → ERROR: Failed to send batch data: {e}")
-            
-            if self.print_to_terminal_flag and (time.time() - last_print_time >= self.print_rate):
-                print("\n--- Weather Station Status Summary ---")
-                for name, data in sorted(all_data_for_print.items()):
-                    print(f"  {name:<15}: {data}")
-                print("--------------------------------------\n")
-                last_print_time = time.time()
-            
-            self._stop_event.wait(self.upload_rate)
+        with self._count_lock: return [(self.feed_name, round(self.tip_count * self.mm_per_tip, 2))]
