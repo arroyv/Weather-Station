@@ -760,7 +760,7 @@ import sqlite3
 from threading import Thread, Event, Lock
 from Adafruit_IO import Data
 import minimalmodbus
-import gpiod # Using the modern GPIO library
+import gpiod
 
 # ============================================================================
 # DATA HANDLER PATTERN
@@ -873,18 +873,18 @@ class WeatherStation:
             for name, sensor in self.sensors.items():
                 sensor_data_list = sensor.get_latest_value_and_feeds()
                 if sensor_data_list:
-                    # Special handling for rain gauge which has a different feed name structure
-                    if name == 'rain':
-                         metrics = {'total': sensor_data_list[0][1]}
-                    else:
-                        metrics = {full_feed_name.split('-')[-1]: value for full_feed_name, value in sensor_data_list}
+                    if name == 'rain': metrics = {'total': sensor_data_list[0][1]}
+                    else: metrics = {full_feed_name.split('-')[-1]: value for full_feed_name, value in sensor_data_list}
                     master_packet[name] = metrics
-
+            
             if master_packet:
                 print(f"\n{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: Dispatching data...")
                 for handler in self.handlers:
                     try: handler.process(master_packet)
                     except Exception as e: print(f"  → ERROR: Handler {type(handler).__name__} failed: {e}")
+            
+            # Use the latest upload_rate from the config
+            upload_rate = self.config.get('upload_rate', 300)
             self._stop_event.wait(upload_rate)
 
     def _config_watcher_loop(self):
@@ -899,9 +899,7 @@ class WeatherStation:
             
     def reload_config(self):
         self.config = self.load_config()
-        # Update running sensor objects with new settings
         for sensor_obj in self.sensors.values():
-            # Check for ModbusSensor specific attributes
             if hasattr(sensor_obj, 'polling_rate'):
                 for conf in self.config['sensors'].values():
                     if conf['name'] == sensor_obj.name:
@@ -935,7 +933,11 @@ class ModbusSensor:
     def _apply_correction(self, raw, config):
         if not config.get("correction"): return raw
         c = config["correction"]
-        if c.get("type") == "map": return (max(c["raw_min"], min(raw, c["raw_max"])) - c["raw_min"]) * 100 / (c["raw_max"] - c["raw_min"])
+        if c.get("type") == "map":
+            raw_min, raw_max = c.get("raw_min", 0), c.get("raw_max", 1023)
+            if (raw_max - raw_min) == 0: return 50.0
+            clamped_raw = max(raw_min, min(raw, raw_max))
+            return (clamped_raw - raw_min) * 100.0 / (raw_max - raw_min)
         return (raw * c.get("factor", 1.0)) + c.get("offset", 0.0)
 
     def _poll(self):
@@ -945,9 +947,18 @@ class ModbusSensor:
                 with self.shared_port_lock:
                     self.last_read_time = time.time()
                     try:
-                        values = [self._apply_correction(getattr(self.instrument, c.get("function", "read_register"))(c["register"], c.get("decimals", 0), c.get("signed", False)), c) for c in self.metric_configs.values()]
+                        values = []
+                        for metric, config in self.metric_configs.items():
+                            read_function = getattr(self.instrument, config.get("function", "read_register"))
+                            raw_value = read_function(
+                                registeraddress=config["register"],
+                                numberOfDecimals=config.get("decimals", 0),
+                                signed=config.get("signed", False)
+                            )
+                            values.append(self._apply_correction(raw_value, config))
                         with self._value_lock: self.latest_values = values
-                    except (IOError, ValueError) as e: print(f"ERROR: Read failed for '{self.name}': {e}")
+                    except (IOError, ValueError) as e:
+                        print(f"ERROR: Read failed for '{self.name}': {e}")
             self._stop_event.wait(self.polling_rate)
 
     def get_latest_value_and_feeds(self):
@@ -956,18 +967,13 @@ class ModbusSensor:
             return list(zip(self.feed_names, [round(v, 2) for v in self.latest_values]))
 
 class RainGaugeSensor:
-    """A Rain Gauge class using the modern gpiod library, compatible with Raspberry Pi 5."""
-    def __init__(self, name, feed_name, gpio_pin, mm_per_tip, **kwargs):
-        self.name = name
-        self.feed_name = feed_name
-        self.gpio_pin = gpio_pin
-        self.mm_per_tip = mm_per_tip
-        self.debounce_ms = kwargs.get('debounce_ms', 250)
-        self.debug = kwargs.get('debug', False)
-        self.tip_count = 0
-        self._count_lock = Lock()
-        self._stop_event = Event()
-        self.chip = gpiod.Chip('gpiochip4')
+    def __init__(self, name, feed_name, gpio_pin, gpio_chip, mm_per_tip, **kwargs):
+        self.name, self.feed_name, self.gpio_pin, self.mm_per_tip = name, feed_name, gpio_pin, mm_per_tip
+        self.debounce_ms, self.debug = kwargs.get('debounce_ms', 250), kwargs.get('debug', False)
+        self.tip_count, self._count_lock, self._stop_event = 0, Lock(), Event()
+        chip_path = f'gpiochip{gpio_chip}'
+        if self.debug: print(f"  [RainGauge] Attempting to open GPIO chip at /dev/{chip_path}")
+        self.chip = gpiod.Chip(chip_path)
         self.gpio_line = self.chip.get_line(self.gpio_pin)
         self.gpio_line.request(consumer="weather-station-rain", type=gpiod.LINE_REQ_EV_FALLING_EDGE, flags=gpiod.LINE_REQ_FLAG_PULL_UP)
 
@@ -976,13 +982,12 @@ class RainGaugeSensor:
         last_event_time = 0
         while not self._stop_event.is_set():
             if self.gpio_line.event_wait(datetime.timedelta(seconds=1)):
-                event = self.gpio_line.event_read()
+                self.gpio_line.event_read()
                 now = time.time() * 1000
                 if (now - last_event_time) > self.debounce_ms:
                     last_event_time = now
-                    with self._count_lock:
-                        self.tip_count += 1
-                        if self.debug: print(f"  [Tipped!] Rain gauge on GPIO {self.gpio_pin}. Total today: {self.tip_count}")
+                    with self._count_lock: self.tip_count += 1
+                    if self.debug: print(f"  [Tipped!] Rain gauge on GPIO {self.gpio_pin}. Total today: {self.tip_count}")
 
     def start(self):
         if self.debug: print(f"  Starting RainGauge on GPIO {self.gpio_pin} (using gpiod)...")
@@ -998,11 +1003,10 @@ class RainGaugeSensor:
     def _daily_reset_thread(self):
         while not self._stop_event.is_set():
             now = datetime.datetime.now()
-            next_midnight = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=1, microsecond=0)
+            next_midnight = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=1)
             if self._stop_event.wait((next_midnight - now).total_seconds()): break
-            with self._count_lock:
-                self.tip_count = 0
-                if self.debug: print(f"  [RainGauge] Daily tip count reset for GPIO {self.gpio_pin}.")
+            with self._count_lock: self.tip_count = 0
+            if self.debug: print(f"  [RainGauge] Daily tip count reset for GPIO {self.gpio_pin}.")
 
     def get_latest_value_and_feeds(self):
         with self._count_lock:
