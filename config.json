@@ -36,7 +36,7 @@
       "name": "pressure",
       "polling_rate": 600,
       "metrics": {
-        "Kpa": {
+        "kpa": {
           "register": 0,
           "decimals": 3,
           "correction": { "type": "linear", "factor": 0.001 }
