@@ -6,54 +6,54 @@
       "name": "soil",
       "polling_rate": 900,
       "metrics": {
-        "moisture": { "register": 0, "decimals": 0, "correction": { "type": "map", "raw_min": 310, "raw_max": 780 }},
-        "temperature": { "register": 1, "decimals": 1, "signed": true, "correction": { "type": "linear", "offset": 0.5 }}
+        "moisture-pct": { "register": 0, "decimals": 0, "correction": { "type": "map", "raw_min": 310, "raw_max": 780 }},
+        "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": { "type": "linear", "offset": 0.5 }}
       }
     },
     "2": {
       "name": "atmosphere",
       "polling_rate": 600,
       "metrics": {
-        "humidity": { "register": 0, "decimals": 1, "correction": { "type": "linear", "offset": -5.0 }},
-        "temperature": { "register": 1, "decimals": 1, "signed": true, "correction": { "type": "linear", "offset": -1.1 }}
+        "humidity-rh": { "register": 0, "decimals": 1, "correction": { "type": "linear", "offset": -5.0 }},
+        "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": { "type": "linear", "offset": -1.1 }}
       }
     },
     "3": {
       "name": "co2",
       "polling_rate": 300,
       "metrics": {
-        "level": { "register": 0, "decimals": 0, "correction": {}}
+        "ppm": { "register": 0, "decimals": 0, "correction": {}}
       }
     },
     "4": {
       "name": "light",
       "polling_rate": 300,
       "metrics": {
-        "intensity": { "register": 0, "function": "read_long", "correction": { "type": "linear", "factor": 1.25 }}
+        "lux": { "register": 0, "function": "read_long", "correction": { "type": "linear", "factor": 1.25 }}
       }
     },
     "5": {
       "name": "pressure",
       "polling_rate": 600,
       "metrics": {
-        "level": { "register": 0, "decimals": 2, "correction": { "type": "linear", "factor": 0.01 }},
-        "temperature": { "register": 1, "decimals": 1, "signed": true, "correction": {}}
+        "hpa": { "register": 0, "decimals": 2, "correction": { "type": "linear", "factor": 0.01 }},
+        "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": {}}
       }
     },
     "6": {
       "name": "wind",
       "polling_rate": 120,
       "metrics": {
-        "direction": { "register": 0, "decimals": 0, "correction": {}},
-        "speed": { "register": 1, "decimals": 1, "correction": {}}
+        "speed-ms": { "register": 1, "decimals": 1, "correction": {}},
+        "direction-deg": { "register": 0, "decimals": 0, "correction": {}}
       }
     }
   },
   "rain_gauge": {
     "name": "rain",
     "gpio_pin": 17,
-    "gpio_chip": 4,
     "mm_per_tip": 0.2765,
-    "debounce_ms": 250
+    "debounce_ms": 250,
+    "metric": "daily-mm" 
   }
 }
