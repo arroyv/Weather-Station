@@ -554,12 +554,11 @@ if __name__ == "__main__":
     aio_key = os.getenv("ADAFRUIT_IO_KEY")
     aio_prefix = os.getenv("ADAFRUIT_FEED_PREFIX", "default-weather")
     if not aio_user or not aio_key:
-        raise Exception("Adafruit IO credentials not found in .env file.")
+        raise Exception("Adafruit IO credentials not in .env file.")
 
     print("\n--- Initializing Weather Station Platform ---")
     config = load_config()
     
-    # --- Initialize Handlers ---
     print("  Initializing data handlers...")
     aio_client = Client(aio_user, aio_key)
     db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "weather_data.db")
@@ -570,13 +569,11 @@ if __name__ == "__main__":
         DataCacheHandler()
     ]
 
-    # --- Initialize Weather Station and Register Handlers ---
     weather_station = WeatherStation(config_path='config.json')
     weather_station.load_config() # Initial load
     for handler in handlers:
         weather_station.add_handler(handler)
         
-    # --- Sensor Discovery ---
     print("  Discovering Modbus sensors...")
     found_addrs = {}
     for port in ['/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyACM0', '/dev/ttyACM1']:
@@ -586,11 +583,9 @@ if __name__ == "__main__":
                 print(f"    → Found '{s_conf['name']}' (addr {addr}) on {port}")
                 found_addrs[addr] = port
 
-    # --- Add Sensors to Station ---
     shared_lock = Lock()
     for addr, port in found_addrs.items():
         s_conf = config['sensors'][str(addr)]
-        # Feed names are still useful for the Adafruit handler and for creating the packet
         feed_names = [f"{aio_prefix}.{s_conf['name']}-{m}" for m in s_conf['metrics']]
         sensor = ModbusSensor(
             name=s_conf['name'], port=port, address=addr, feed_names=feed_names,
@@ -600,14 +595,17 @@ if __name__ == "__main__":
         weather_station.add_sensor(s_conf['name'], sensor)
 
     rg_conf = config['rain_gauge']
-    rain_feed = f"{aio_prefix}.{rg_conf['name']}-total"
+    rain_feed = f"{aio_prefix}.{rg_conf['name']}-{rg_conf['metric']}"
     rain_sensor = RainGaugeSensor(
-        name=rg_conf['name'], feed_name=rain_feed, gpio_pin=rg_conf['gpio_pin'],
-        gpio_chip=rg_conf['gpio_chip'], mm_per_tip=rg_conf['mm_per_tip'], debug=True
+        name=rg_conf['name'], 
+        feed_name=rain_feed, 
+        gpio_pin=rg_conf['gpio_pin'],
+        mm_per_tip=rg_conf['mm_per_tip'], 
+        debug=True,
+        debounce_ms=rg_conf['debounce_ms']
     )
     weather_station.add_sensor(rg_conf['name'], rain_sensor)
     
-    # --- Run Forever ---
     try:
         weather_station.start_all()
         print("\n--- Collector Service is Running --- (Press Ctrl+C to stop)")
