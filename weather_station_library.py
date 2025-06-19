@@ -960,4 +960,13 @@ class RainGaugeSensor:
             if self.debug: print(f"  [Tipped!] Rain gauge on GPIO {self.gpio_pin}. Total today: {self.tip_count}")
     def _daily_reset_thread(self):
         while not self._stop_event.is_set():
-            now =
+            now = datetime.datetime.now()
+            next_midnight = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=1)
+            if self._stop_event.wait((next_midnight - now).total_seconds()): break
+            with self._count_lock: self.tip_count = 0
+            if self.debug: print(f"  [RainGauge] Daily tip count reset for GPIO {self.gpio_pin}.")
+    
+    def get_latest_readings(self):
+        """Returns a dictionary of the latest readings, e.g., {'daily-mm': 1.2}"""
+        with self._count_lock:
+            return {self.metric: round(self.tip_count * self.mm_per_tip, 2)}
