@@ -36,7 +36,7 @@
       "name": "pressure",
       "polling_rate": 600,
       "metrics": {
-        "hpa": { "register": 0, "decimals": 2, "correction": { "type": "linear", "factor": 0.01 }},
+        "Kpa": { "register": 0, "decimals": 2, "correction": { "type": "linear", "factor": 0.01 }},
         "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": {}}
       }
     },
@@ -45,7 +45,7 @@
       "polling_rate": 120,
       "metrics": {
         "speed-ms": { "register": 1, "decimals": 1, "correction": {}},
-        "direction-deg": { "register": 0, "decimals": 0, "correction": {}}
+        "direction": { "register": 0, "decimals": 0, "correction": {}}
       }
     }
   },
@@ -54,6 +54,6 @@
     "gpio_pin": 17,
     "mm_per_tip": 0.2765,
     "debounce_ms": 250,
-    "metric": "daily-mm" 
+    "metric": "daily-mm"
   }
 }
