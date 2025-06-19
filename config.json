@@ -6,7 +6,7 @@
       "name": "soil",
       "polling_rate": 900,
       "metrics": {
-        "moisture-pct": { "register": 0, "decimals": 0, "correction": { "type": "map", "raw_min": 310, "raw_max": 780 }},
+        "moisture-rh": { "register": 0, "decimals": 0, "correction": { "type": "map", "raw_min": 310, "raw_max": 780 }},
         "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": { "type": "linear", "offset": 0.5 }}
       }
     },
@@ -36,7 +36,11 @@
       "name": "pressure",
       "polling_rate": 600,
       "metrics": {
-        "Kpa": { "register": 0, "decimals": 2, "correction": { "type": "linear", "factor": 0.01 }},
+        "Kpa": {
+          "register": 0,
+          "decimals": 3,
+          "correction": { "type": "linear", "factor": 0.001 }
+        },
         "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": {}}
       }
     },
