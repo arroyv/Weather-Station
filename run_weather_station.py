@@ -594,13 +594,13 @@ if __name__ == "__main__":
         )
         weather_station.add_sensor(s_conf['name'], sensor)
 
+    # NEW, CORRECTED BLOCK
     rg_conf = config['rain_gauge']
-    rain_feed = f"{aio_prefix}.{rg_conf['name']}-{rg_conf['metric']}"
     rain_sensor = RainGaugeSensor(
-        name=rg_conf['name'], 
-        feed_name=rain_feed, 
+        name=rg_conf['name'],
+        metric=rg_conf['metric'],
         gpio_pin=rg_conf['gpio_pin'],
-        mm_per_tip=rg_conf['mm_per_tip'], 
+        mm_per_tip=rg_conf['mm_per_tip'],
         debug=True,
         debounce_ms=rg_conf['debounce_ms']
     )

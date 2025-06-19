@@ -750,7 +750,7 @@
 
 # In weather_station_library.py, replace the entire RainGaugeSensor class with this:
 
-# weather_station_library.py (Corrected)
+# weather_station_library.py (Corrected for all known bugs)
 
 import os
 import time
@@ -781,12 +781,11 @@ class AdafruitIOHandler(DataHandler):
                 feed_id = f"{self.feed_prefix}.{sensor}-{metric}"
                 try:
                     self.aio_client.send_data(feed_id, value)
-                    if self.aio_client.debug: print(f"    → Sent {value} to {feed_id}")
+                    print(f"    → Sent {value:.2f} to {feed_id}")
                 except Exception as e:
                     print(f"    → ERROR sending to {feed_id}: {e}")
 
 class SQLiteHandler(DataHandler):
-    # This class is correct, no changes needed
     def __init__(self, db_path):
         self.db_path, self.conn = db_path, None
     def start(self):
@@ -809,7 +808,6 @@ class SQLiteHandler(DataHandler):
             print(f"  [SQLiteHandler]   → ERROR: {e}")
 
 class DataCacheHandler(DataHandler):
-    # This class is correct, no changes needed
     def __init__(self):
         self._cache, self._lock = {}, Lock()
         print("  [DataCacheHandler] In-memory cache initialized.")
@@ -825,7 +823,6 @@ class DataCacheHandler(DataHandler):
 # WEATHERSTATION CLASS
 # ============================================================================
 class WeatherStation:
-    # This class is correct, no changes needed
     def __init__(self, config_path='config.json'):
         self.sensors, self.handlers, self._stop_event = {}, [], Event()
         self.config_path, self.last_config_mtime, self.config = config_path, 0, {}
@@ -846,24 +843,27 @@ class WeatherStation:
         self._stop_event.set()
         for sensor in self.sensors.values(): sensor.stop()
         for handler in self.handlers: handler.stop()
+
     def _data_dispatcher_loop(self):
         upload_rate = self.config.get('upload_rate', 300)
         self._stop_event.wait(10)
         while not self._stop_event.is_set():
             master_packet = {}
             for name, sensor in self.sensors.items():
-                sensor_data_list = sensor.get_latest_value_and_feeds()
-                if sensor_data_list:
-                    if name == 'rain': metrics = {'total': sensor_data_list[0][1]}
-                    else: metrics = {full_feed_name.split('-')[-1]: value for full_feed_name, value in sensor_data_list}
-                    master_packet[name] = metrics
+                # Use the new, more reliable get_latest_readings() method
+                readings = sensor.get_latest_readings()
+                if readings:
+                    master_packet[name] = readings
+            
             if master_packet:
                 print(f"\n{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: Dispatching data...")
                 for handler in self.handlers:
                     try: handler.process(master_packet)
                     except Exception as e: print(f"  → ERROR: Handler {type(handler).__name__} failed: {e}")
+            
             upload_rate = self.config.get('upload_rate', 300)
             self._stop_event.wait(upload_rate)
+
     def _config_watcher_loop(self):
         while not self._stop_event.is_set():
             try:
@@ -873,6 +873,7 @@ class WeatherStation:
                     self.reload_config()
             except OSError as e: print(f"  [ConfigWatcher] ERROR: {e}")
             self._stop_event.wait(30)
+            
     def reload_config(self):
         self.config = self.load_config()
         for sensor_obj in self.sensors.values():
@@ -887,11 +888,10 @@ class WeatherStation:
 # SENSOR CLASSES
 # ============================================================================
 class ModbusSensor:
-    def __init__(self, name, port, address, feed_names, metric_configs, polling_rate, **kwargs):
-        self.name, self.feed_names, self.metric_configs, self.polling_rate = name, feed_names, metric_configs, polling_rate
+    def __init__(self, name, port, address, metric_configs, polling_rate, **kwargs):
+        self.name, self.metric_configs, self.polling_rate = name, metric_configs, polling_rate
         self.instrument = minimalmodbus.Instrument(port, address)
-        self.instrument.serial.baudrate = kwargs.get('baudrate', 4800)
-        self.instrument.mode = minimalmodbus.MODE_RTU
+        self.instrument.serial.baudrate, self.instrument.mode = kwargs.get('baudrate', 4800), minimalmodbus.MODE_RTU
         self.debug, self.shared_port_lock = kwargs.get('debug', False), kwargs.get('lock', Lock())
         self.initial_delay, self.min_read_gap = kwargs.get('initial_delay', 2), kwargs.get('min_read_gap', 2)
         self.last_read_time, self._stop_event, self.latest_values, self._value_lock = 0, Event(), None, Lock()
@@ -918,32 +918,27 @@ class ModbusSensor:
                     self.last_read_time = time.time()
                     try:
                         values = []
-                        for metric, config in self.metric_configs.items():
+                        for config in self.metric_configs.values():
                             read_function = getattr(self.instrument, config.get("function", "read_register"))
-                            # THIS IS THE CORRECTED LINE FOR PROBLEM 2
-                            raw_value = read_function(
-                                registeraddress=config["register"],
-                                number_of_decimals=config.get("decimals", 0),
-                                signed=config.get("signed", False)
-                            )
+                            raw_value = read_function(registeraddress=config["register"], number_of_decimals=config.get("decimals", 0), signed=config.get("signed", False))
                             values.append(self._apply_correction(raw_value, config))
                         with self._value_lock: self.latest_values = values
-                    except (IOError, ValueError) as e:
-                        print(f"ERROR: Read failed for '{self.name}': {e}")
+                    except (IOError, ValueError) as e: print(f"ERROR: Read failed for '{self.name}': {e}")
             self._stop_event.wait(self.polling_rate)
-    def get_latest_value_and_feeds(self):
+    
+    def get_latest_readings(self):
+        """Returns a dictionary of the latest readings, e.g., {'temp-c': 21.5, 'humidity-rh': 45.2}"""
         with self._value_lock:
-            if self.latest_values is None: return []
-            return list(zip(self.feed_names, [round(v, 2) for v in self.latest_values]))
+            if self.latest_values is None: return {}
+            return dict(zip(self.metric_configs.keys(), [round(v, 2) for v in self.latest_values]))
 
 class RainGaugeSensor:
-    # This class is correct, no changes needed
-    def __init__(self, name, feed_name, gpio_pin, mm_per_tip, **kwargs):
-        self.name, self.feed_name, self.gpio_pin, self.mm_per_tip = name, feed_name, gpio_pin, mm_per_tip
+    def __init__(self, name, metric, gpio_pin, mm_per_tip, **kwargs):
+        self.name, self.metric, self.gpio_pin, self.mm_per_tip = name, metric, gpio_pin, mm_per_tip
         self.debounce_us = kwargs.get('debounce_ms', 250) * 1000
         self.debug = kwargs.get('debug', False)
         self.tip_count, self._count_lock, self._stop_event = 0, Lock(), Event()
-        self.pi, self.callback_handler, self._last_tick = pigpio.pi(), None, 0
+        self.pi, self.callback_handler = pigpio.pi(), None
     def start(self):
         if self.debug: print(f"  Starting RainGauge on GPIO {self.gpio_pin} (using pigpio)...")
         if not self.pi.connected:
@@ -965,11 +960,4 @@ class RainGaugeSensor:
             if self.debug: print(f"  [Tipped!] Rain gauge on GPIO {self.gpio_pin}. Total today: {self.tip_count}")
     def _daily_reset_thread(self):
         while not self._stop_event.is_set():
-            now = datetime.datetime.now()
-            next_midnight = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=1, microsecond=0)
-            if self._stop_event.wait((next_midnight - now).total_seconds()): break
-            with self._count_lock: self.tip_count = 0
-            if self.debug: print(f"  [RainGauge] Daily tip count reset for GPIO {self.gpio_pin}.")
-    def get_latest_value_and_feeds(self):
-        with self._count_lock:
-            return [(self.feed_name, round(self.tip_count * self.mm_per_tip, 2))]
+            now =
