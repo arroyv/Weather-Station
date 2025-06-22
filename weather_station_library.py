@@ -181,6 +181,7 @@ class RainGaugeSensor:
         self.name, self.metric, self.gpio_pin, self.mm_per_tip = name, metric, gpio_pin, mm_per_tip
         self.debounce_s = kwargs.get('debounce_ms', 250) / 1000.0 # Convert to seconds for gpiozero
         self.debug = kwargs.get('debug', False)
+        # The lock is correctly created here as self._count_lock
         self.tip_count, self._count_lock, self._stop_event = 0, Lock(), Event()
         self.button = Button(self.gpio_pin, pull_up=True, bounce_time=self.debounce_s)
 
@@ -208,5 +209,6 @@ class RainGaugeSensor:
             if self.debug: print(f"  [RainGauge] Daily tip count reset for GPIO {self.gpio_pin}.")
 
     def get_latest_readings(self):
-        with self._lock:
+        # THIS IS THE CORRECTED METHOD
+        with self._count_lock: # Now correctly uses the lock created in __init__
             return {self.metric: round(self.tip_count * self.mm_per_tip, 2)}
