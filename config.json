@@ -1,6 +1,7 @@
 {
   "upload_rate": 300,
   "print_rate": 1200,
+  "rediscovery_rate": 600,
   "sensors": {
     "1": {
       "name": "soil",
@@ -45,11 +46,17 @@
       }
     },
     "6": {
-      "name": "wind",
+      "name": "wind-direction",
       "polling_rate": 120,
       "metrics": {
-        "speed-ms": { "register": 1, "decimals": 1, "correction": {}},
         "direction": { "register": 0, "decimals": 0, "correction": {}}
+      }
+    },
+    "7": {
+      "name": "wind-speed",
+      "polling_rate": 120,
+      "metrics": {
+        "speed-ms": { "register": 1, "decimals": 1, "correction": {}}
       }
     }
   },
