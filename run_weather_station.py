@@ -1,4 +1,5 @@
 # run_weather_station.py
+
 import os
 import time
 import json
@@ -54,27 +55,52 @@ if __name__ == "__main__":
     for handler in handlers:
         weather_station.add_handler(handler)
         
-    print("  Discovering Modbus sensors...")
+    # --- THIS IS THE NEW, MORE COMPREHENSIVE LIST OF PORTS ---
+    PORTS_TO_SCAN = [
+        # Common USB-to-Serial adapter names (FTDI, CH340, etc.)
+        '/dev/ttyUSB0',
+        '/dev/ttyUSB1',
+        '/dev/ttyUSB2',
+        '/dev/ttyUSB3',
+
+        # Common USB CDC-ACM device names (like Arduinos)
+        '/dev/ttyACM0',
+        '/dev/ttyACM1',
+        '/dev/ttyACM2',
+        '/dev/ttyACM3',
+
+        # Raspberry Pi's on-board hardware serial ports
+        '/dev/ttyS0',
+        '/dev/ttyAMA0',
+        '/dev/serial0', # A stable alias for the primary console UART
+        '/dev/serial1'  # A stable alias for the secondary UART
+    ]
+    
+    print(f"  Discovering Modbus sensors across {len(PORTS_TO_SCAN)} potential ports...")
     found_addrs = {}
-    for port in ['/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyACM0', '/dev/ttyACM1']:
+    # The loop now iterates over the comprehensive list
+    for port in PORTS_TO_SCAN:
         for addr_str, s_conf in config['sensors'].items():
             addr = int(addr_str)
-            if addr not in found_addrs and test_sensor(port, addr, 4800):
-                print(f"    → Found '{s_conf['name']}' (addr {addr}) on {port}")
-                found_addrs[addr] = port
+            if addr not in found_addrs:
+                # We add a check here to see if the port file actually exists before trying to open it
+                if os.path.exists(port):
+                    if test_sensor(port, addr, 4800):
+                        print(f"    → Found '{s_conf['name']}' (addr {addr}) on {port}")
+                        found_addrs[addr] = port
 
     shared_lock = Lock()
     for addr, port in found_addrs.items():
         s_conf = config['sensors'][str(addr)]
-        feed_names = [f"{aio_prefix}.{s_conf['name']}-{m}" for m in s_conf['metrics']]
+        # This logic is now part of the WeatherStation class and not needed here for feed name generation
+        # feed_names = [f"{aio_prefix}.{s_conf['name']}-{m}" for m in s_conf['metrics']]
         sensor = ModbusSensor(
-            name=s_conf['name'], port=port, address=addr, feed_names=feed_names,
+            name=s_conf['name'], port=port, address=addr,
             metric_configs=s_conf['metrics'], polling_rate=s_conf['polling_rate'],
             lock=shared_lock, debug=True, initial_delay=5
         )
         weather_station.add_sensor(s_conf['name'], sensor)
 
-    # NEW, CORRECTED BLOCK
     rg_conf = config['rain_gauge']
     rain_sensor = RainGaugeSensor(
         name=rg_conf['name'],
