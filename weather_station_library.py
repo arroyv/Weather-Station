@@ -208,5 +208,5 @@ class RainGaugeSensor:
             if self.debug: print(f"  [RainGauge] Daily tip count reset for GPIO {self.gpio_pin}.")
 
     def get_latest_readings(self):
-        with self._value_lock:
+        with self._lock:
             return {self.metric: round(self.tip_count * self.mm_per_tip, 2)}
