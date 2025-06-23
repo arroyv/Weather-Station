@@ -82,7 +82,7 @@ class DataCacheHandler(DataHandler):
             return self._cache.copy()
 
 # ============================================================================
-# WEATHERSTATION CLASS
+# WEATHERSTATION CLASS (UPDATED WITH EFFICIENT DISCOVERY)
 # ============================================================================
 class WeatherStation:
     def __init__(self, config_path='config.json'):
@@ -90,16 +90,20 @@ class WeatherStation:
         self.config_path, self.last_config_mtime, self.config = config_path, 0, {}
         self.shared_modbus_lock = Lock()
         self.ports_to_scan = []
+
     def add_sensor(self, name, sensor):
         self.sensors[name] = sensor
+
     def add_handler(self, handler):
         self.handlers.append(handler)
+
     def load_config(self):
         print("  [Config] Loading configuration...")
         with open(self.config_path, 'r') as f:
             self.config = json.load(f)
         self.last_config_mtime = os.path.getmtime(self.config_path)
         return self.config
+
     def start_all(self):
         print("\n--- Starting All Services ---")
         for handler in self.handlers:
@@ -109,18 +113,68 @@ class WeatherStation:
         Thread(target=self._data_dispatcher_loop, daemon=True).start()
         Thread(target=self._config_watcher_loop, daemon=True).start()
         Thread(target=self._discovery_loop, daemon=True).start()
+
     def stop_all(self):
         self._stop_event.set()
         for sensor in self.sensors.values():
             sensor.stop()
         for handler in self.handlers:
             handler.stop()
+
     def _test_sensor_at_location(self, port, address, baudrate):
         try:
-            inst = minimalmodbus.Instrument(port, address)
-            inst.serial.baudrate = baudrate; inst.serial.timeout = 2
-            _ = inst.read_register(0, 0); return True
-        except (IOError, ValueError): return False
+            # Use the shared lock to prevent interfering with active polling
+            with self.shared_modbus_lock:
+                inst = minimalmodbus.Instrument(port, address)
+                inst.serial.baudrate = baudrate
+                inst.serial.timeout = 2
+                _ = inst.read_register(0, 0)
+            return True
+        except (IOError, ValueError):
+            return False
+
+    def _discovery_loop(self):
+        """Periodically scans for sensors, but only if some are missing."""
+        rediscovery_rate = self.config.get('rediscovery_rate', 600)
+        print(f"  [Discovery] Re-discovery service started. Will check every {rediscovery_rate} seconds.")
+        
+        # Initial wait before the first check
+        self._stop_event.wait(rediscovery_rate)
+
+        while not self._stop_event.is_set():
+            num_configured_modbus = len(self.config.get('sensors', {}))
+            # Count only the running sensors that are of the ModbusSensor type
+            num_running_modbus = sum(1 for s in self.sensors.values() if isinstance(s, ModbusSensor))
+
+            # --- THIS IS THE NEW LOGIC ---
+            if num_running_modbus >= num_configured_modbus:
+                print(f"[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [Discovery] All {num_configured_modbus} Modbus sensors found. Skipping scan.")
+            else:
+                # If we get here, it means sensors are missing, so we run the scan.
+                print(f"\n[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [Discovery] {num_running_modbus}/{num_configured_modbus} sensors found. Scanning for missing...")
+                
+                found_sensor_names = [s.name for s in self.sensors.values()]
+                
+                for addr_str, s_conf in self.config['sensors'].items():
+                    if s_conf['name'] not in found_sensor_names:
+                        addr = int(addr_str)
+                        for port in self.ports_to_scan:
+                            if os.path.exists(port) and self._test_sensor_at_location(port, addr, 4800):
+                                print(f"    → SUCCESS: Found new sensor '{s_conf['name']}' on {port}!")
+                                sensor = ModbusSensor(
+                                    name=s_conf['name'], port=port, address=addr,
+                                    metric_configs=s_conf['metrics'], polling_rate=s_conf['polling_rate'],
+                                    lock=self.shared_modbus_lock, debug=True, initial_delay=2
+                                )
+                                self.add_sensor(s_conf['name'], sensor)
+                                sensor.start()
+                                break # Stop scanning for this sensor
+                print("  [Discovery] Scan complete.")
+            
+            # Wait for the next cycle
+            self._stop_event.wait(rediscovery_rate)
+
+    # The rest of the WeatherStation class (_data_dispatcher_loop, reload_config, etc.) remains the same
     def _data_dispatcher_loop(self):
         upload_rate = self.config.get('upload_rate', 300)
         self._stop_event.wait(10)
@@ -133,26 +187,7 @@ class WeatherStation:
                     except Exception as e: print(f"  → ERROR: Handler {type(handler).__name__} failed: {e}")
             upload_rate = self.config.get('upload_rate', 300)
             self._stop_event.wait(upload_rate)
-    def _discovery_loop(self):
-        rediscovery_rate = self.config.get('rediscovery_rate', 600)
-        print(f"  [Discovery] Re-discovery service started. Will scan every {rediscovery_rate} seconds.")
-        while not self._stop_event.is_set():
-            self._stop_event.wait(rediscovery_rate)
-            if self._stop_event.is_set(): break
-            print(f"\n[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [Discovery] Scanning for missing sensors...")
-            found_sensor_names = list(self.sensors.keys())
-            for addr_str, s_conf in self.config['sensors'].items():
-                if s_conf['name'] not in found_sensor_names:
-                    print(f"  [Discovery] Looking for missing sensor '{s_conf['name']}'...")
-                    addr = int(addr_str)
-                    for port in self.ports_to_scan:
-                        if self._test_sensor_at_location(port, addr, 4800):
-                            print(f"    → SUCCESS: Found new sensor '{s_conf['name']}' on {port}!")
-                            sensor = ModbusSensor(name=s_conf['name'], port=port, address=addr, metric_configs=s_conf['metrics'], polling_rate=s_conf['polling_rate'], lock=self.shared_modbus_lock, debug=True)
-                            self.add_sensor(s_conf['name'], sensor)
-                            sensor.start()
-                            break
-            print("  [Discovery] Scan complete.")
+
     def _config_watcher_loop(self):
         while not self._stop_event.is_set():
             try:
@@ -160,8 +195,10 @@ class WeatherStation:
                 if mtime > self.last_config_mtime:
                     print("\n  [ConfigWatcher] Detected config file change. Reloading...")
                     self.reload_config()
-            except OSError as e: print(f"  [ConfigWatcher] ERROR: {e}")
+            except OSError as e:
+                print(f"  [ConfigWatcher] ERROR: {e}")
             self._stop_event.wait(30)
+            
     def reload_config(self):
         self.config = self.load_config()
         rediscovery_rate = self.config.get('rediscovery_rate', 600)
@@ -170,7 +207,8 @@ class WeatherStation:
             if hasattr(sensor_obj, 'polling_rate'):
                 for conf in self.config['sensors'].values():
                     if conf['name'] == sensor_obj.name:
-                        sensor_obj.polling_rate, sensor_obj.metric_configs = conf['polling_rate'], conf['metrics']
+                        sensor_obj.polling_rate = conf['polling_rate']
+                        sensor_obj.metric_configs = conf['metrics']
                         print(f"    → Updated settings for sensor '{sensor_obj.name}'")
                         break
 # ============================================================================
