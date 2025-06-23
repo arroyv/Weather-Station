@@ -13,9 +13,9 @@ from weather_station_library import (
 )
 
 def load_config(path='config.json'):
-    """Loads the configuration from the JSON file."""
-    with open(path, 'r') as f:
-        return json.load(f)
+    print("  [Config] Loading configuration...")
+    with open(self.config_path, 'r') as f:
+        self.config = json.load(f)
 
 # The test_sensor function is now part of the WeatherStation class,
 # so it is no longer needed here.
