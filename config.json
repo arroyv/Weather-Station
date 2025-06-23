@@ -7,56 +7,52 @@
       "name": "soil",
       "polling_rate": 900,
       "metrics": {
-        "moisture-rh": { "register": 0, "decimals": 0, "correction": { "type": "map", "raw_min": 310, "raw_max": 780 }},
-        "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": { "type": "linear", "offset": 0.5 }}
+        "moisture-rh": { "register": 0, "decimals": 0, "correction": { "type": "map", "raw_min": 310, "raw_max": 780 }, "feed_key": "soil-moisture-rh" },
+        "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": { "type": "linear", "offset": 0.5 }, "feed_key": "soil-temp-c" }
       }
     },
     "2": {
       "name": "atmosphere",
       "polling_rate": 600,
       "metrics": {
-        "humidity-rh": { "register": 0, "decimals": 1, "correction": { "type": "linear", "offset": -5.0 }},
-        "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": { "type": "linear", "offset": -1.1 }}
+        "humidity-rh": { "register": 0, "decimals": 1, "correction": { "type": "linear", "offset": -5.0 }, "feed_key": "atmosphere-humidity-rh" },
+        "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": { "type": "linear", "offset": -1.1 }, "feed_key": "atmosphere-temp-c" }
       }
     },
     "3": {
       "name": "co2",
       "polling_rate": 300,
       "metrics": {
-        "ppm": { "register": 0, "decimals": 0, "correction": {}}
+        "ppm": { "register": 0, "decimals": 0, "correction": {}, "feed_key": "co2-ppm" }
       }
     },
     "4": {
       "name": "light",
       "polling_rate": 300,
       "metrics": {
-        "lux": { "register": 0, "function": "read_long", "correction": { "type": "linear", "factor": 1.25 }}
+        "lux": { "register": 0, "function": "read_long", "correction": { "type": "linear", "factor": 1.25 }, "feed_key": "light-lux" }
       }
     },
     "5": {
       "name": "pressure",
       "polling_rate": 600,
       "metrics": {
-        "kpa": {
-          "register": 0,
-          "decimals": 3,
-          "correction": { "type": "linear", "factor": 0.001 }
-        },
-        "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": {}}
+        "kpa": { "register": 0, "decimals": 3, "correction": { "type": "linear", "factor": 0.001 }, "feed_key": "pressure-kpa" },
+        "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": {}, "feed_key": "pressure-temp-c" }
       }
     },
     "6": {
       "name": "wind-direction",
       "polling_rate": 120,
       "metrics": {
-        "direction": { "register": 0, "decimals": 0, "correction": {}}
+        "direction": { "register": 0, "decimals": 0, "correction": {}, "feed_key": "wind-direction" }
       }
     },
     "7": {
       "name": "wind-speed",
       "polling_rate": 120,
       "metrics": {
-        "speed-ms": { "register": 1, "decimals": 1, "correction": {}}
+        "speed-ms": { "register": 1, "decimals": 1, "correction": {}, "feed_key": "wind-speed-ms" }
       }
     }
   },
@@ -65,6 +61,7 @@
     "gpio_pin": 17,
     "mm_per_tip": 0.2765,
     "debounce_ms": 250,
-    "metric": "daily-mm"
+    "metric": "daily-mm",
+    "feed_key": "rain-daily-mm"
   }
 }
