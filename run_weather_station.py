@@ -1,4 +1,17 @@
 # run_weather_station.py
+#TODO: Figure out how to get more fed in adafruit IO or figure out what todo if adafrui IO feed doesn't exist
+#TODO: Figure out how the rain guige data will be sen t shoudl it be accumulated every minute hour or day and then send saved. Zero should be sent if no rain has fallen during accumulation period?
+#TODO: Figure out how to toggle the diffrent data handlers on and off
+#TODO: Reduce the number of ports to scan by checking the config file for the ports that are actually used
+#TODO: Write flaks based dash board code that uses the SQLite database to display the data in a web browser and controll the sensors rates toggle data handlers and other settings.
+#TODO: Set up MCP server to allow LLM to access the data and control the sensors and graph using jupyter notebook
+#TODO: Try out TimeGPTModel API for tim series analysis and prediction
+#TODO: Re set up auto startng the python program instructions and Set up of the respberry pi instructions and read me
+#TODO: write instruction on how to set up local files needed .env file and config.json file
+#TODO: implemet sleep state to svae power, also find way to reduce power consumtpion of the sensors and the raspberry pi
+# Wite doesn notes for problem to check  like ckec wifi rssi to see if wifi connection is solid, make sure ther is nothing in th way of the antenna
+# figure out how to add a usb wifi anterna to the raspberry pi to improve wifi signal
+# find seom seather proof boses for the raspberry pi
 
 import os
 import time
