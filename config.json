@@ -61,7 +61,7 @@
     "gpio_pin": 17,
     "mm_per_tip": 0.2765,
     "debounce_ms": 250,
-    "metric": "daily-mm",
-    "feed_key": "rain-daily-mm"
+    "metric": "mm",
+    "feed_key": "rain-mm"
   }
 }
