@@ -8,7 +8,7 @@
         /* Embedded styles for offline access */
         body {
             font-family: Arial, sans-serif; /* Fallback for offline */
-            background: linear-gradient(to bottom, #dbe6f6, #c5d7f0); /* Offline gradient background */
+            background: linear-gradient(to bottom, #f0f2f5, #e6e9ee); /* Lighter, neutral gradient */
             margin: 0;
             padding: 40px 20px;
             color: #1a1a1a;
@@ -42,12 +42,8 @@
         }
 
         .container {
-            max-width: 800px;
+            max-width: 1200px; /* Wider container for more columns */
             margin: 0 auto;
-            background: white;
-            padding: 30px 25px;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
             text-align: center;
         }
 
@@ -61,36 +57,39 @@
 
         .sensor-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 15px;
+            /* Adjust grid to allow for more items before wrapping */
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
         }
 
         .sensor-box {
             background-color: #e3f2f1;
-            border-radius: 10px;
-            padding: 18px 20px;
-            font-size: 1.1rem;
+            border-radius: 12px; /* Slightly more rounded */
+            padding: 20px;
             color: #004D40;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
             transition: background-color 0.3s ease, transform 0.2s;
             cursor: default;
             text-align: left;
+            border-left: 5px solid #00796B; /* Accent border */
         }
 
         .sensor-box:hover {
-            background-color: #b2dfdb;
-            transform: translateY(-3px);
+            transform: translateY(-4px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.1);
         }
 
         .sensor-box .value {
-            font-size: 2.2rem;
+            font-size: 2.5rem;
             font-weight: bold;
             display: block;
             margin-bottom: 5px;
+            color: #004D40; /* Default value color */
         }
         .sensor-box .label {
             font-size: 1rem;
-            color: #333;
+            font-weight: 600; /* Bolder label */
+            color: #004D40; /* Default label color */
             margin-bottom: 10px;
             display: block;
         }
@@ -109,15 +108,31 @@
             margin-top: 5px;
         }
 
-        /* Special colors */
-        .co2 { background-color: #ffcdd2; color: #b71c1c; }
-        .co2:hover { background-color: #ef9a9a; }
-        .pressure { background-color: #fff9c4; color: #f57f17; }
-        .pressure:hover { background-color: #fff59d; }
-        .wind-speed { background-color: #c8e6c9; color: #2e7d32; }
-        .wind-speed:hover { background-color: #a5d6a7; }
-        .wind-direction { background-color: #bbdefb; color: #1565c0; }
-        .wind-direction:hover { background-color: #90caf9; }
+        /* --- NEW: Special colors for legibility --- */
+        .co2 { background-color: #ffebed; border-left-color: #f44336; }
+        .co2 .value, .co2 .label { color: #c62828; }
+        
+        .pressure { background-color: #fffde7; border-left-color: #ffc107; }
+        .pressure .value, .pressure .label { color: #f57f17; }
+
+        .wind-speed { background-color: #e8f5e9; border-left-color: #4caf50; }
+        .wind-speed .value, .wind-speed .label { color: #2e7d32; }
+
+        .wind-direction { background-color: #e3f2fd; border-left-color: #2196f3; }
+        .wind-direction .value, .wind-direction .label { color: #1565c0; }
+
+        .atmosphere { background-color: #ede7f6; border-left-color: #673ab7; }
+        .atmosphere .value, .atmosphere .label { color: #4527a0; }
+
+        .soil { background-color: #efebe9; border-left-color: #795548; }
+        .soil .value, .soil .label { color: #4e342e; }
+
+        .rain { background-color: #e0f7fa; border-left-color: #00bcd4; }
+        .rain .value, .rain .label { color: #006064; }
+
+        .light { background-color: #fff3e0; border-left-color: #ff9800; }
+        .light .value, .light .label { color: #e65100; }
+
     </style>
 </head>
 <body>
@@ -140,6 +155,10 @@
                         {% if 'pressure' in sensor_name %}pressure{% endif %}
                         {% if 'wind-speed' in sensor_name %}wind-speed{% endif %}
                         {% if 'wind-direction' in sensor_name %}wind-direction{% endif %}
+                        {% if 'atmosphere' in sensor_name %}atmosphere{% endif %}
+                        {% if 'soil' in sensor_name %}soil{% endif %}
+                        {% if 'rain' in sensor_name %}rain{% endif %}
+                        {% if 'light' in sensor_name %}light{% endif %}
                     ">
                         <span class="value">{{ '%.2f'|format(reading.value) }}</span>
                         <span class="label">{{ key }}</span>
