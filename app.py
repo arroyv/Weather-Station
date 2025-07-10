@@ -62,10 +62,18 @@ def settings():
             current_config['station_info']['station_name'] = request.form.get('station_name', 'default-name')
             current_config['wifi_sync']['target_url'] = request.form.get('target_url', '')
 
-            # --- NEW: Update timing intervals ---
-            current_config['timing']['collection_interval_seconds'] = request.form.get('collection_interval_seconds', 600, type=int)
+            # Update timing intervals
             current_config['timing']['transmission_interval_seconds'] = request.form.get('transmission_interval_seconds', 600, type=int)
             current_config['timing']['adafruit_io_interval_seconds'] = request.form.get('adafruit_io_interval_seconds', 300, type=int)
+
+            # --- NEW: Update individual sensor polling rates ---
+            for sensor_id, sensor_config in current_config['sensors'].items():
+                sensor_name = sensor_config['name']
+                # The form field name will be, e.g., "polling_rate_soil"
+                form_field_name = f"polling_rate_{sensor_name}"
+                new_rate = request.form.get(form_field_name, type=int)
+                if new_rate is not None:
+                    current_config['sensors'][sensor_id]['polling_rate'] = new_rate
 
             save_config(current_config)
             flash("Configuration saved successfully! Changes will be applied on the next cycle.", "success")

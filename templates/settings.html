@@ -71,17 +71,11 @@
                 </div>
             </div>
             
-            <!-- NEW TIMING SECTION -->
             <div class="card shadow-sm mb-4">
                 <div class="card-header">
-                    <h5>Timing Intervals (in seconds)</h5>
+                    <h5>Service Timing Intervals (in seconds)</h5>
                 </div>
                 <div class="card-body">
-                    <div class="mb-3">
-                        <label for="collection_interval_seconds" class="form-label">Data Collection Interval</label>
-                        <input type="number" class="form-control" id="collection_interval_seconds" name="collection_interval_seconds" value="{{ config.timing.collection_interval_seconds }}">
-                        <div class="form-text">How often the station reads from sensors and saves to the local database.</div>
-                    </div>
                     <div class="mb-3">
                         <label for="transmission_interval_seconds" class="form-label">LoRa & WiFi Transmission Interval</label>
                         <input type="number" class="form-control" id="transmission_interval_seconds" name="transmission_interval_seconds" value="{{ config.timing.transmission_interval_seconds }}">
@@ -91,6 +85,26 @@
                         <label for="adafruit_io_interval_seconds" class="form-label">Adafruit IO Upload Interval</label>
                         <input type="number" class="form-control" id="adafruit_io_interval_seconds" name="adafruit_io_interval_seconds" value="{{ config.timing.adafruit_io_interval_seconds }}">
                         <div class="form-text">How often the station sends the latest data to Adafruit IO.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- NEW SENSOR POLLING SECTION -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h5>Sensor Polling Rates (in seconds)</h5>
+                </div>
+                <div class="card-body">
+                    <p class="form-text">How often each physical sensor is read. This is the actual data logging interval for each sensor.</p>
+                    <div class="row">
+                    {% for sensor_id, sensor_config in config.sensors.items() %}
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="polling_rate_{{ sensor_config.name }}" class="form-label text-capitalize">{{ sensor_config.name }}</label>
+                                <input type="number" class="form-control" id="polling_rate_{{ sensor_config.name }}" name="polling_rate_{{ sensor_config.name }}" value="{{ sensor_config.polling_rate }}">
+                            </div>
+                        </div>
+                    {% endfor %}
                     </div>
                 </div>
             </div>

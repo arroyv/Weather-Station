@@ -9,7 +9,6 @@
     "wifi_sync_enabled": false
   },
   "timing": {
-    "collection_interval_seconds": 600,
     "transmission_interval_seconds": 600,
     "adafruit_io_interval_seconds": 300
   },
@@ -29,7 +28,7 @@
   "sensors": {
     "1": {
       "name": "soil",
-      "polling_rate": 900,
+      "polling_rate": 1800,
       "metrics": {
         "moisture-rh": { "register": 0, "decimals": 0, "correction": { "type": "map", "raw_min": 310, "raw_max": 780 }, "feed_key": "soil-moisture-rh" },
         "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": { "type": "linear", "offset": 0.5 }, "feed_key": "soil-temp-c" }
@@ -45,7 +44,7 @@
     },
     "3": {
       "name": "co2",
-      "polling_rate": 300,
+      "polling_rate": 60,
       "metrics": {
         "ppm": { "register": 0, "decimals": 0, "correction": {}, "feed_key": "co2-ppm" }
       }
@@ -59,7 +58,7 @@
     },
     "5": {
       "name": "pressure",
-      "polling_rate": 600,
+      "polling_rate": 900,
       "metrics": {
         "kpa": { "register": 0, "decimals": 3, "correction": { "type": "linear", "factor": 0.001 }, "feed_key": "pressure-kpa" },
         "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": {}, "feed_key": "pressure-temp-c" }

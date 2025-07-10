@@ -20,7 +20,6 @@ class WeatherStation:
         
         self.config = initial_config
         self.station_id = self.config.get('station_info', {}).get('station_id', 0)
-        self.collection_interval = self.config.get('timing', {}).get('collection_interval_seconds', 600)
 
     def add_sensor(self, name, sensor):
         self.sensors[name] = sensor
@@ -29,7 +28,6 @@ class WeatherStation:
         """Receives a new config object and updates its settings."""
         self.config = new_config
         self.station_id = self.config.get('station_info', {}).get('station_id', 0)
-        self.collection_interval = self.config.get('timing', {}).get('collection_interval_seconds', 600)
         
         # Update polling rates for all running Modbus sensors
         for sensor_obj in self.sensors.values():
@@ -66,7 +64,9 @@ class WeatherStation:
             sensor = ModbusSensor(
                 name=s_conf['name'], port=port, address=addr,
                 metric_configs=s_conf['metrics'], polling_rate=s_conf['polling_rate'],
-                lock=self.shared_modbus_lock, debug=True
+                lock=self.shared_modbus_lock, debug=True,
+                # Pass the db manager and station ID to the sensor itself
+                db_manager=self.db_manager, station_id=self.station_id
             )
             self.add_sensor(s_conf['name'], sensor)
 
@@ -75,22 +75,21 @@ class WeatherStation:
             rain_sensor = RainGaugeSensor(
                 name=rg_conf['name'], metric=rg_conf['metric'],
                 gpio_pin=rg_conf['gpio_pin'], mm_per_tip=rg_conf['mm_per_tip'],
-                debug=True, debounce_ms=rg_conf['debounce_ms']
+                debug=True, debounce_ms=rg_conf['debounce_ms'],
+                # Pass the db manager and station ID to the sensor itself
+                db_manager=self.db_manager, station_id=self.station_id
             )
             self.add_sensor(rg_conf['name'], rain_sensor)
 
     def start(self):
-        print("\n--- Starting Data Collection Service ---")
+        print("\n--- Starting Sensor Polling Services ---")
         for sensor in self.sensors.values():
             sensor.start()
-        self.collector_thread = Thread(target=self._data_collector_loop, daemon=True)
-        self.collector_thread.start()
 
     def stop(self):
         self._stop_event.set()
         for sensor in self.sensors.values():
             sensor.stop()
-        self.collector_thread.join()
 
     def _test_sensor_at_location(self, port, address, baudrate):
         try:
@@ -103,26 +102,8 @@ class WeatherStation:
         except (IOError, ValueError):
             return False
 
-    def _data_collector_loop(self):
-        """
-        Collects data from sensors and writes it to the database at the configured interval.
-        """
-        print(f"[Collector] Starting data collection loop (initial interval: {self.collection_interval}s).")
-        
-        self._stop_event.wait(5) # Initial delay
-        while not self._stop_event.wait(self.collection_interval):
-            master_packet = {name: sensor.get_latest_readings() for name, sensor in self.sensors.items()}
-            
-            if master_packet:
-                print(f"\n[{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [Collector] Writing data to database...")
-                for sensor_name, metrics in master_packet.items():
-                    for metric_name, value in metrics.items():
-                        if value is not None:
-                            self.db_manager.write_reading(self.station_id, sensor_name, metric_name, value)
-                            print(f"  → Logged: {sensor_name}/{metric_name} = {value}")
-
 # ============================================================================
-# SENSOR CLASSES (Largely unchanged, but simplified)
+# SENSOR CLASSES
 # ============================================================================
 class ModbusSensor:
     def __init__(self, name, port, address, metric_configs, polling_rate, **kwargs):
@@ -132,11 +113,17 @@ class ModbusSensor:
         self.instrument.mode = minimalmodbus.MODE_RTU
         self.debug = kwargs.get('debug', False)
         self.shared_port_lock = kwargs.get('lock', Lock())
-        self._stop_event, self.latest_values, self._value_lock = Event(), {}, Lock()
+        self._stop_event = Event()
         self.poller_thread = None
+        
+        # Sensor now needs to know about the database to write to it.
+        self.db_manager = kwargs.get('db_manager')
+        self.station_id = kwargs.get('station_id')
+        if not self.db_manager:
+            raise ValueError("ModbusSensor requires a db_manager instance.")
 
     def start(self):
-        if self.debug: print(f"  [Sensor] Starting poller for '{self.name}'")
+        if self.debug: print(f"  [Sensor] Starting poller for '{self.name}' (interval: {self.polling_rate}s)")
         self.poller_thread = Thread(target=self._poll, daemon=True)
         self.poller_thread.start()
 
@@ -146,7 +133,6 @@ class ModbusSensor:
         self.poller_thread.join()
 
     def _apply_correction(self, raw, config):
-        # Correction logic remains the same
         if "correction" not in config: return raw
         c = config["correction"]
         if c.get("type") == "map":
@@ -161,7 +147,6 @@ class ModbusSensor:
         while not self._stop_event.wait(self.polling_rate):
             with self.shared_port_lock:
                 try:
-                    current_values = {}
                     for metric_name, config in self.metric_configs.items():
                         read_func_name = config.get("function", "read_register")
                         read_func = getattr(self.instrument, read_func_name)
@@ -176,27 +161,28 @@ class ModbusSensor:
                             )
                         
                         corrected_value = self._apply_correction(raw_value, config)
-                        current_values[metric_name] = round(corrected_value, 2)
-
-                    with self._value_lock:
-                        self.latest_values = current_values
+                        
+                        # --- NEW: Write directly to the database ---
+                        if corrected_value is not None:
+                            self.db_manager.write_reading(self.station_id, self.name, metric_name, corrected_value)
+                            if self.debug: print(f"  → Logged: {self.name}/{metric_name} = {corrected_value:.2f}")
 
                 except (IOError, ValueError) as e:
                     print(f"ERROR: Read failed for '{self.name}': {e}")
-
-    def get_latest_readings(self):
-        with self._value_lock:
-            return self.latest_values.copy()
-
 
 class RainGaugeSensor:
     def __init__(self, name, metric, gpio_pin, mm_per_tip, **kwargs):
         self.name, self.metric, self.gpio_pin, self.mm_per_tip = name, metric, gpio_pin, mm_per_tip
         self.debounce_s = kwargs.get('debounce_ms', 250) / 1000.0
         self.debug = kwargs.get('debug', False)
-        self.tip_count, self._count_lock, self._stop_event = 0, Lock(), Event()
+        self._stop_event = Event()
         self.button = Button(self.gpio_pin, pull_up=True, bounce_time=self.debounce_s)
-        self.last_reported_count = 0
+
+        # Sensor now needs to know about the database to write to it.
+        self.db_manager = kwargs.get('db_manager')
+        self.station_id = kwargs.get('station_id')
+        if not self.db_manager:
+            raise ValueError("RainGaugeSensor requires a db_manager instance.")
 
     def start(self):
         if self.debug: print(f"  [Sensor] Starting RainGauge on GPIO {self.gpio_pin}")
@@ -208,13 +194,7 @@ class RainGaugeSensor:
         self.button.close()
 
     def _tip_callback(self):
-        with self._count_lock:
-            self.tip_count += 1
-            if self.debug: print(f"  [Tipped!] Rain gauge. Total tips: {self.tip_count}")
-
-    def get_latest_readings(self):
-        with self._count_lock:
-            # Report the number of new tips since the last read
-            new_tips = self.tip_count - self.last_reported_count
-            self.last_reported_count = self.tip_count
-            return {self.metric: round(new_tips * self.mm_per_tip, 4)}
+        # --- NEW: Log each tip event directly to the database ---
+        tip_value = self.mm_per_tip
+        self.db_manager.write_reading(self.station_id, self.name, self.metric, tip_value)
+        if self.debug: print(f"  → Logged: [Tipped!] Rain gauge event. Value: {tip_value}")
