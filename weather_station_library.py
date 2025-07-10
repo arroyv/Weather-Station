@@ -1,4 +1,4 @@
-# weather_station_library.py (Syntax Corrected)
+# weather_station_library.py
 
 import os
 import time
