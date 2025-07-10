@@ -180,11 +180,20 @@ class ModbusSensor:
                         read_func_name = config.get("function", "read_register")
                         read_func = getattr(self.instrument, read_func_name)
                         
-                        raw_value = read_func(
-                            registeraddress=config["register"],
-                            number_of_decimals=config.get("decimals", 0),
-                            signed=config.get("signed", False)
-                        )
+                        # --- FIX START ---
+                        # The read_long function takes different arguments than read_register.
+                        # We need to call them with the correct set of parameters.
+                        if read_func_name == 'read_long':
+                            # read_long() only takes the register address
+                            raw_value = read_func(registeraddress=config["register"])
+                        else:
+                            # Other functions (like read_register) take more arguments
+                            raw_value = read_func(
+                                registeraddress=config["register"],
+                                number_of_decimals=config.get("decimals", 0),
+                                signed=config.get("signed", False)
+                            )
+                        # --- FIX END ---
                         
                         corrected_value = self._apply_correction(raw_value, config)
                         current_values[metric_name] = round(corrected_value, 2)
@@ -231,4 +240,3 @@ class RainGaugeSensor:
             new_tips = self.tip_count - self.last_reported_count
             self.last_reported_count = self.tip_count
             return {self.metric: round(new_tips * self.mm_per_tip, 4)}
-
