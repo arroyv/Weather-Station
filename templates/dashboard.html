@@ -4,67 +4,157 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Weather Station Dashboard</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background-color: #f8f9fa; }
-        .card { transition: transform 0.2s; }
-        .card:hover { transform: scale(1.03); }
-        .navbar { background-color: #343a40 !important; }
-        .metric-value { font-size: 2.5rem; font-weight: bold; color: #007bff; }
-        .metric-label { font-size: 1.2rem; color: #6c757d; }
-        .timestamp { font-size: 0.8rem; color: #999; }
+        /* Embedded styles for offline access */
+        body {
+            font-family: Arial, sans-serif; /* Fallback for offline */
+            background: linear-gradient(to bottom, #dbe6f6, #c5d7f0); /* Offline gradient background */
+            margin: 0;
+            padding: 40px 20px;
+            color: #1a1a1a;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .navbar {
+            background: #fff;
+            padding: 10px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .navbar a {
+            text-decoration: none;
+            color: #00796B;
+            font-weight: 600;
+            padding: 8px 15px;
+            border-radius: 6px;
+            transition: background-color 0.3s;
+        }
+        .navbar a.brand {
+            font-size: 1.5rem;
+        }
+        .navbar a:hover, .navbar a.active {
+            background-color: #e3f2f1;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        h1 {
+            font-weight: 600;
+            font-size: 2.2rem;
+            margin-top: 0;
+            margin-bottom: 30px;
+            color: #00796B;
+        }
+
+        .sensor-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .sensor-box {
+            background-color: #e3f2f1;
+            border-radius: 10px;
+            padding: 18px 20px;
+            font-size: 1.1rem;
+            color: #004D40;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+            transition: background-color 0.3s ease, transform 0.2s;
+            cursor: default;
+            text-align: left;
+        }
+
+        .sensor-box:hover {
+            background-color: #b2dfdb;
+            transform: translateY(-3px);
+        }
+
+        .sensor-box .value {
+            font-size: 2.2rem;
+            font-weight: bold;
+            display: block;
+            margin-bottom: 5px;
+        }
+        .sensor-box .label {
+            font-size: 1rem;
+            color: #333;
+            margin-bottom: 10px;
+            display: block;
+        }
+        .sensor-box .timestamp {
+            font-size: 0.75rem;
+            color: #555;
+            display: block;
+        }
+        .sensor-box .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            background-color: #a7c7e7;
+            color: #1c3d5d;
+            font-size: 0.8rem;
+            margin-top: 5px;
+        }
+
+        /* Special colors */
+        .co2 { background-color: #ffcdd2; color: #b71c1c; }
+        .co2:hover { background-color: #ef9a9a; }
+        .pressure { background-color: #fff9c4; color: #f57f17; }
+        .pressure:hover { background-color: #fff59d; }
+        .wind-speed { background-color: #c8e6c9; color: #2e7d32; }
+        .wind-speed:hover { background-color: #a5d6a7; }
+        .wind-direction { background-color: #bbdefb; color: #1565c0; }
+        .wind-direction:hover { background-color: #90caf9; }
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/">Weather Dashboard: {{ station_name }}</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <a class="nav-link active" href="{{ url_for('dashboard') }}">Dashboard</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('settings') }}">Settings</a>
-                    </li>
-                </ul>
-            </div>
+    <nav class="navbar">
+        <a href="/" class="brand">{{ station_name }}</a>
+        <div>
+            <a href="{{ url_for('dashboard') }}" class="active">Dashboard</a>
+            <a href="{{ url_for('settings') }}">Settings</a>
         </div>
     </nav>
 
-    <div class="container mt-4">
-        <div class="row" id="dashboard-grid">
+    <div class="container">
+        <h1>Live Sensor Readings</h1>
+        <div class="sensor-grid">
             {% if data %}
                 {% for key, reading in data.items() %}
-                <div class="col-xl-3 col-lg-4 col-md-6 mb-4">
-                    <div class="card h-100 shadow-sm">
-                        <div class="card-body text-center">
-                            <p class="metric-value">{{ '%.2f'|format(reading.value) }}</p>
-                            <p class="metric-label">{{ key }}</p>
-                            {% if reading.rssi %}
-                                <span class="badge bg-info">RSSI: {{ reading.rssi }}</span>
-                            {% endif %}
-                        </div>
-                        <div class="card-footer text-muted text-center">
-                           <span class="timestamp">Updated: {{ reading.timestamp | replace("T", " ") | slice(0, 19) }} UTC</span>
-                        </div>
+                    {% set sensor_name = reading.sensor | lower %}
+                    <div class="sensor-box 
+                        {% if 'co2' in sensor_name %}co2{% endif %}
+                        {% if 'pressure' in sensor_name %}pressure{% endif %}
+                        {% if 'wind-speed' in sensor_name %}wind-speed{% endif %}
+                        {% if 'wind-direction' in sensor_name %}wind-direction{% endif %}
+                    ">
+                        <span class="value">{{ '%.2f'|format(reading.value) }}</span>
+                        <span class="label">{{ key }}</span>
+                        <span class="timestamp">Updated: {{ reading.timestamp | replace("T", " ") | slice(0, 19) }} UTC</span>
+                        {% if reading.rssi %}
+                            <span class="badge">RSSI: {{ reading.rssi }}</span>
+                        {% endif %}
                     </div>
-                </div>
                 {% endfor %}
             {% else %}
-                <div class="col">
-                    <div class="alert alert-warning" role="alert">
-                        No data received yet. Please wait for the first readings to be logged.
-                    </div>
-                </div>
+                <p>No data received yet. Please wait for the first readings to be logged.</p>
             {% endif %}
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         // Refresh the page every 60 seconds to get new data
         setTimeout(() => {
