@@ -1,4 +1,26 @@
 {
+  "station_info": {
+    "station_name": "greenhouse-base",
+    "station_id": 1
+  },
+  "services": {
+    "adafruit_io_enabled": true,
+    "lora_enabled": true,
+    "wifi_sync_enabled": false
+  },
+  "database": {
+    "path": "weather_data.db"
+  },
+  "lora": {
+    "role": "base",
+    "device": "/dev/ttyS0",
+    "frequency": 915.0,
+    "remote_address": 2,
+    "local_address": 1
+  },
+  "wifi_sync": {
+    "target_url": "http://192.168.1.100:8000/api/data"
+  },
   "upload_rate": 300,
   "print_rate": 1200,
   "rediscovery_rate": 600,

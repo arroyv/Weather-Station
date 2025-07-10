@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF--8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Station Settings</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">Weather Dashboard: {{ config.station_info.station_name }}</a>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('dashboard') }}">Dashboard</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="{{ url_for('settings') }}">Settings</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <h2>Station Settings</h2>
+        <p>Configure the station's behavior. Changes will be applied automatically by the running services.</p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('settings') }}">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h5>General</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="station_name" class="form-label">Station Name</label>
+                        <input type="text" class="form-control" id="station_name" name="station_name" value="{{ config.station_info.station_name }}">
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h5>Enabled Services</h5>
+                </div>
+                <div class="card-body">
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="adafruit_io_enabled" name="adafruit_io_enabled" {% if config.services.adafruit_io_enabled %}checked{% endif %}>
+                        <label class="form-check-label" for="adafruit_io_enabled">Adafruit IO Upload</label>
+                    </div>
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="lora_enabled" name="lora_enabled" {% if config.services.lora_enabled %}checked{% endif %}>
+                        <label class="form-check-label" for="lora_enabled">LoRa Communication</label>
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="wifi_sync_enabled" name="wifi_sync_enabled" {% if config.services.wifi_sync_enabled %}checked{% endif %}>
+                        <label class="form-check-label" for="wifi_sync_enabled">WiFi Sync to Central Server</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h5>WiFi Sync Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="target_url" class="form-label">Target Server URL</label>
+                        <input type="text" class="form-control" id="target_url" name="target_url" placeholder="http://jetson-nano-ip:port/api/data" value="{{ config.wifi_sync.target_url }}">
+                        <div class="form-text">The full URL of the API endpoint on the Jetson Nano to receive data.</div>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Save Settings</button>
+        </form>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
