@@ -48,10 +48,45 @@ class AdafruitIOHandler(BaseHandler):
         self.aio_client = aio_client
         self.aio_prefix = aio_prefix
         self.last_sent_ids = {}
+        # A cache to store looked-up feed keys to avoid repeated searching
+        self._feed_key_cache = {}
         super().__init__(config, db_manager)
 
     def update_interval(self):
         self.interval = self.config.get('timing', {}).get('adafruit_io_interval_seconds', 300)
+        # Clear the cache when config is updated so keys are re-read
+        self._feed_key_cache = {}
+
+    def _get_feed_key(self, sensor_name, metric_name):
+        """
+        Looks up the specific feed_key from the config file.
+        Caches results for efficiency.
+        """
+        cache_key = f"{sensor_name}.{metric_name}"
+        if cache_key in self._feed_key_cache:
+            return self._feed_key_cache[cache_key]
+
+        # Handle rain gauge as a special case
+        if sensor_name == self.config.get('rain_gauge', {}).get('name'):
+            key = self.config['rain_gauge'].get('feed_key')
+            if key:
+                self._feed_key_cache[cache_key] = key
+                return key
+
+        # Search through the modbus sensors
+        for sensor_config in self.config.get('sensors', {}).values():
+            if sensor_config.get('name') == sensor_name:
+                metric_config = sensor_config.get('metrics', {}).get(metric_name)
+                if metric_config and 'feed_key' in metric_config:
+                    key = metric_config['feed_key']
+                    self._feed_key_cache[cache_key] = key
+                    return key
+        
+        # Fallback if no specific key is found
+        print(f"[{self.name}] WARNING: No specific 'feed_key' found for {sensor_name}/{metric_name}. Building one from names.")
+        fallback_key = f"{sensor_name}-{metric_name}"
+        self._feed_key_cache[cache_key] = fallback_key
+        return fallback_key
 
     def loop(self):
         while not self._stop_event.wait(self.interval):
@@ -65,7 +100,16 @@ class AdafruitIOHandler(BaseHandler):
                 record_id = data['id']
                 if self.last_sent_ids.get(key) != record_id:
                     try:
-                        feed_key = f"{data['sensor']}-{data['metric']}"
+                        # --- FIX: Look up the feed_key from the config instead of just building it. ---
+                        sensor_name = data['sensor']
+                        metric_name = data['metric']
+                        
+                        feed_key = self._get_feed_key(sensor_name, metric_name)
+                        
+                        if not feed_key:
+                            print(f"[{self.name}] ERROR: Could not determine feed key for {sensor_name}/{metric_name}. Skipping.")
+                            continue
+
                         full_feed_id = f"{self.aio_prefix}.{feed_key}"
                         
                         print(f"[{self.name}] Sending {data['value']:.2f} to {full_feed_id}")
@@ -73,6 +117,7 @@ class AdafruitIOHandler(BaseHandler):
                         self.last_sent_ids[key] = record_id
                     except Exception as e:
                         print(f"[{self.name}] ERROR sending data for {key}: {e}")
+
 
 class LoRaHandler(BaseHandler):
     """
