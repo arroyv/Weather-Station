@@ -36,7 +36,7 @@ class WeatherStation:
         config = self.config
         ports_to_scan = [
             '/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyUSB2',
-            '/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyS0', '/dev/serial0'
+            '/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyACM2', '/dev/ttyACM3','/dev/ttyS0', '/dev/serial0'
         ]
         
         print(f"  [Discovery] Performing initial discovery of Modbus sensors...")
