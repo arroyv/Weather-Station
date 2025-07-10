@@ -1,88 +1,97 @@
-# web_api.py
-
+# app.py
 import os
-import sqlite3
 import json
-from flask import Flask, jsonify, request
+from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
 from threading import Lock
+from database import DatabaseManager
 
 # --- Configuration ---
 project_dir = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(project_dir, 'weather_data.db')
 CONFIG_PATH = os.path.join(project_dir, 'config.json')
+DB_PATH = os.path.join(project_dir, 'weather_data.db')
 
 app = Flask(__name__)
+# A secret key is required for flashing messages
+app.secret_key = 'super-secret-key-for-weather-station' 
 config_lock = Lock()
 
-def query_db(query, args=(), one=False):
-    """Helper function to safely query the database in read-only mode."""
-    try:
-        # Connect in read-only mode to prevent accidental writes from the API
-        con = sqlite3.connect(f'file:{DB_PATH}?mode=ro', uri=True)
-        con.row_factory = sqlite3.Row
-        cur = con.cursor()
-        cur.execute(query, args)
-        rv = cur.fetchall()
-        con.close()
-        return (rv[0] if rv else None) if one else rv
-    except sqlite3.Error as e:
-        print(f"Database error: {e}")
-        return None
+# --- Initialize Database Manager ---
+# This will be shared across all Flask requests.
+db_manager = DatabaseManager(DB_PATH)
+
+def load_config():
+    """Helper to load the main config file."""
+    with config_lock:
+        with open(CONFIG_PATH, 'r') as f:
+            return json.load(f)
+
+def save_config(new_config):
+    """Helper to save the main config file."""
+    with config_lock:
+        with open(CONFIG_PATH, 'w') as f:
+            json.dump(new_config, f, indent=2)
+
+# --- Routes ---
 
 @app.route('/')
-def index():
-    """A simple status page to show the API is running."""
-    return "<h1>Weather Station API</h1><p>API is running. Use endpoints like /api/config or /api/history.</p>"
+def dashboard():
+    """
+    The main dashboard page. Displays the latest sensor readings.
+    """
+    latest_data = db_manager.get_latest_readings()
+    config = load_config()
+    # Sort data for consistent display
+    sorted_data = dict(sorted(latest_data.items()))
+    return render_template('dashboard.html', data=sorted_data, station_name=config.get('station_info', {}).get('station_name', 'Unknown Station'))
 
-@app.route('/api/history', methods=['GET'])
-def get_history():
-    """Provides historical data. Example: /api/history?sensor=soil&metric=temperature&hours=24"""
-    sensor = request.args.get('sensor')
-    metric = request.args.get('metric')
-    hours = request.args.get('hours', default=24, type=int)
-    if not sensor or not metric:
-        return jsonify({"error": "Missing 'sensor' and 'metric' parameters"}), 400
-    
-    query_str = "SELECT timestamp, value FROM readings WHERE sensor = ? AND metric = ? AND timestamp >= datetime('now', '-' || ? || ' hours') ORDER BY timestamp ASC"
-    results = query_db(query_str, args=(sensor, metric, hours))
-    
-    if results is None:
-        return jsonify({"error": "Database query failed. Is the collector service running and creating data?"}), 500
-    
-    data = [dict(row) for row in results]
-    return jsonify(data)
+@app.route('/settings', methods=['GET', 'POST'])
+def settings():
+    """
+    Allows viewing and updating the station's configuration.
+    """
+    if request.method == 'POST':
+        try:
+            current_config = load_config()
+            
+            # Update service toggles
+            current_config['services']['adafruit_io_enabled'] = 'adafruit_io_enabled' in request.form
+            current_config['services']['lora_enabled'] = 'lora_enabled' in request.form
+            current_config['services']['wifi_sync_enabled'] = 'wifi_sync_enabled' in request.form
+            
+            # Update text fields
+            current_config['station_info']['station_name'] = request.form.get('station_name', 'default-name')
+            current_config['wifi_sync']['target_url'] = request.form.get('target_url', '')
+
+            # --- NEW: Update timing intervals ---
+            current_config['timing']['collection_interval_seconds'] = request.form.get('collection_interval_seconds', 600, type=int)
+            current_config['timing']['transmission_interval_seconds'] = request.form.get('transmission_interval_seconds', 600, type=int)
+            current_config['timing']['adafruit_io_interval_seconds'] = request.form.get('adafruit_io_interval_seconds', 300, type=int)
+
+            save_config(current_config)
+            flash("Configuration saved successfully! Changes will be applied on the next cycle.", "success")
+        except Exception as e:
+            flash(f"Error saving configuration: {e}", "danger")
+            
+        return redirect(url_for('settings'))
+
+    config = load_config()
+    return render_template('settings.html', config=config)
+
+# --- API Endpoints (for completeness) ---
+
+@app.route('/api/latest', methods=['GET'])
+def get_latest():
+    """Provides the latest data as JSON."""
+    latest_data = db_manager.get_latest_readings()
+    return jsonify(latest_data)
 
 @app.route('/api/config', methods=['GET'])
 def get_config():
-    """Reads and returns the current configuration."""
-    with config_lock:
-        with open(CONFIG_PATH, 'r') as f:
-            config_data = json.load(f)
-    return jsonify(config_data)
-
-@app.route('/api/config', methods=['POST'])
-def set_config():
-    """Receives new config data (as JSON) and saves it."""
-    new_config = request.json
-    if not new_config:
-        return jsonify({"error": "Invalid JSON payload"}), 400
-    
-    with config_lock:
-        # It's safer to read the old config, update it, and then write
-        # This prevents accidental deletion of keys if the payload is partial.
-        try:
-            with open(CONFIG_PATH, 'r') as f:
-                current_config = json.load(f)
-            current_config.update(new_config)
-            with open(CONFIG_PATH, 'w') as f:
-                json.dump(current_config, f, indent=2)
-        except Exception as e:
-            return jsonify({"error": f"Failed to write config file: {e}"}), 500
-            
-    return jsonify({"success": True, "message": "Configuration saved. Collector will reload settings automatically."})
+    """Returns the current configuration as JSON."""
+    return jsonify(load_config())
 
 if __name__ == '__main__':
-    print("--- Starting Weather Station API Service ---")
-    print(f"View status at http://127.0.0.1:5000")
-    # Set debug=False for production use
+    print("--- Starting Weather Station Dashboard & API ---")
+    print(f"Access the dashboard at http://127.0.0.1:5000")
+    # Set debug=False for production use. host='0.0.0.0' makes it accessible on your network.
     app.run(host='0.0.0.0', port=5000, debug=True)

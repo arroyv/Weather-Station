@@ -8,6 +8,11 @@
     "lora_enabled": true,
     "wifi_sync_enabled": false
   },
+  "timing": {
+    "collection_interval_seconds": 600,
+    "transmission_interval_seconds": 600,
+    "adafruit_io_interval_seconds": 300
+  },
   "database": {
     "path": "weather_data.db"
   },
@@ -21,9 +26,6 @@
   "wifi_sync": {
     "target_url": "http://192.168.1.100:8000/api/data"
   },
-  "upload_rate": 300,
-  "print_rate": 1200,
-  "rediscovery_rate": 600,
   "sensors": {
     "1": {
       "name": "soil",

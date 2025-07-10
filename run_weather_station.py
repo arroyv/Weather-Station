@@ -4,9 +4,9 @@ import time
 import json
 from dotenv import load_dotenv
 from Adafruit_IO import Client
-from threading import Lock, Thread, Event
+from threading import Thread, Event
 
-from weather_station_library import WeatherStation, ModbusSensor, RainGaugeSensor
+from weather_station_library import WeatherStation
 from database import DatabaseManager
 from handlers import AdafruitIOHandler, LoRaHandler, WiFiSyncHandler
 
@@ -14,6 +14,40 @@ def load_config(path='config.json'):
     """Loads the configuration from the JSON file."""
     with open(path, 'r') as f:
         return json.load(f)
+
+def config_watcher_loop(config_path, weather_station, services, stop_event):
+    """
+    A central loop that watches for changes in the config file and tells
+    all other running services to reload their settings.
+    """
+    # Use a lock to prevent race conditions if multiple services access the file
+    # Although not strictly necessary here, it's good practice.
+    from threading import Lock
+    file_lock = Lock()
+    
+    with file_lock:
+        last_mtime = os.path.getmtime(config_path)
+
+    while not stop_event.wait(10): # Check every 10 seconds
+        try:
+            with file_lock:
+                mtime = os.path.getmtime(config_path)
+                if mtime > last_mtime:
+                    print("\n[ConfigWatcher] Detected config file change. Reloading all services...")
+                    last_mtime = mtime
+                    
+                    new_config = load_config(config_path)
+                    
+                    # Update the weather station itself
+                    weather_station.update_config(new_config)
+                    
+                    # Update all other services
+                    for service in services:
+                        if hasattr(service, 'update_config'):
+                            service.update_config(new_config)
+
+        except OSError as e:
+            print(f"[ConfigWatcher] ERROR: {e}")
 
 if __name__ == "__main__":
     load_dotenv()
@@ -25,15 +59,14 @@ if __name__ == "__main__":
     print("\n--- Initializing Weather Station Platform ---")
     print(f"  Station ID: {station_id}")
 
-    # 1. Initialize the Database Manager (the central hub)
+    # 1. Initialize the Database Manager
     db_manager = DatabaseManager(db_path)
 
     # 2. Initialize the Weather Station to collect data
-    weather_station = WeatherStation(config_path='config.json', db_manager=db_manager)
-    weather_station.load_config() # Initial load
+    weather_station = WeatherStation(config, db_manager=db_manager)
     weather_station.discover_and_add_sensors()
     
-    # 3. Initialize and start all enabled data handlers/services
+    # 3. Initialize all enabled data handlers/services
     all_services = []
     services_config = config.get('services', {})
 
@@ -56,30 +89,36 @@ if __name__ == "__main__":
         wifi_handler = WiFiSyncHandler(config, db_manager)
         all_services.append(wifi_handler)
 
+    # 4. Create a shared stop event for graceful shutdown
+    stop_event = Event()
+
     try:
         # Start the main data collection service
-        weather_station.start_all()
+        weather_station.start()
         # Start all other data handling services
         for service in all_services:
             service.start()
+        
+        # Start the central config watcher
+        watcher_thread = Thread(target=config_watcher_loop, args=('config.json', weather_station, all_services, stop_event), daemon=True)
+        watcher_thread.start()
             
         print("\n--- All Services are Running --- (Press Ctrl+C to stop)")
-        # The main thread just needs to keep the program alive
         while True:
             time.sleep(1)
             
     except KeyboardInterrupt:
         print("\nShutting down gracefully...")
-        weather_station.stop_all()
+        stop_event.set()
+        weather_station.stop()
         for service in all_services:
             service.stop()
         db_manager.close()
         print("Shutdown complete.")
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
-        # Perform cleanup
-        weather_station.stop_all()
+        stop_event.set()
+        weather_station.stop()
         for service in all_services:
             service.stop()
         db_manager.close()
-

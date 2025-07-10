@@ -70,6 +70,30 @@
                     </div>
                 </div>
             </div>
+            
+            <!-- NEW TIMING SECTION -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header">
+                    <h5>Timing Intervals (in seconds)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="collection_interval_seconds" class="form-label">Data Collection Interval</label>
+                        <input type="number" class="form-control" id="collection_interval_seconds" name="collection_interval_seconds" value="{{ config.timing.collection_interval_seconds }}">
+                        <div class="form-text">How often the station reads from sensors and saves to the local database.</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="transmission_interval_seconds" class="form-label">LoRa & WiFi Transmission Interval</label>
+                        <input type="number" class="form-control" id="transmission_interval_seconds" name="transmission_interval_seconds" value="{{ config.timing.transmission_interval_seconds }}">
+                        <div class="form-text">How often the station attempts to send data via LoRa (if remote) or WiFi Sync (if base).</div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="adafruit_io_interval_seconds" class="form-label">Adafruit IO Upload Interval</label>
+                        <input type="number" class="form-control" id="adafruit_io_interval_seconds" name="adafruit_io_interval_seconds" value="{{ config.timing.adafruit_io_interval_seconds }}">
+                        <div class="form-text">How often the station sends the latest data to Adafruit IO.</div>
+                    </div>
+                </div>
+            </div>
 
             <div class="card shadow-sm mb-4">
                 <div class="card-header">

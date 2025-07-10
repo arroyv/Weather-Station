@@ -11,25 +11,36 @@ from gpiozero import Button
 # WEATHERSTATION CLASS
 # ============================================================================
 class WeatherStation:
-    def __init__(self, config_path='config.json', db_manager=None):
+    def __init__(self, initial_config, db_manager=None):
         self.sensors, self._stop_event = {}, Event()
-        self.config_path, self.last_config_mtime, self.config = config_path, 0, {}
         self.shared_modbus_lock = Lock()
         self.db_manager = db_manager
         if not self.db_manager:
             raise ValueError("A DatabaseManager instance is required.")
-        self.station_id = 0
+        
+        self.config = initial_config
+        self.station_id = self.config.get('station_info', {}).get('station_id', 0)
+        self.collection_interval = self.config.get('timing', {}).get('collection_interval_seconds', 600)
 
     def add_sensor(self, name, sensor):
         self.sensors[name] = sensor
 
-    def load_config(self):
-        print("  [Config] Loading configuration...")
-        with open(self.config_path, 'r') as f:
-            self.config = json.load(f)
-        self.last_config_mtime = os.path.getmtime(self.config_path)
+    def update_config(self, new_config):
+        """Receives a new config object and updates its settings."""
+        self.config = new_config
         self.station_id = self.config.get('station_info', {}).get('station_id', 0)
-        return self.config
+        self.collection_interval = self.config.get('timing', {}).get('collection_interval_seconds', 600)
+        
+        # Update polling rates for all running Modbus sensors
+        for sensor_obj in self.sensors.values():
+            if isinstance(sensor_obj, ModbusSensor):
+                for conf in self.config.get('sensors', {}).values():
+                    if conf['name'] == sensor_obj.name:
+                        sensor_obj.polling_rate = conf['polling_rate']
+                        sensor_obj.metric_configs = conf['metrics']
+                        print(f"    → Updated polling rate for '{sensor_obj.name}' to {sensor_obj.polling_rate}s")
+                        break
+        print("[WeatherStation] Configuration updated.")
 
     def discover_and_add_sensors(self):
         """Scans for and adds all sensors from the config file."""
@@ -68,17 +79,18 @@ class WeatherStation:
             )
             self.add_sensor(rg_conf['name'], rain_sensor)
 
-    def start_all(self):
+    def start(self):
         print("\n--- Starting Data Collection Service ---")
         for sensor in self.sensors.values():
             sensor.start()
-        Thread(target=self._data_collector_loop, daemon=True).start()
-        Thread(target=self._config_watcher_loop, daemon=True).start()
+        self.collector_thread = Thread(target=self._data_collector_loop, daemon=True)
+        self.collector_thread.start()
 
-    def stop_all(self):
+    def stop(self):
         self._stop_event.set()
         for sensor in self.sensors.values():
             sensor.stop()
+        self.collector_thread.join()
 
     def _test_sensor_at_location(self, port, address, baudrate):
         try:
@@ -93,15 +105,12 @@ class WeatherStation:
 
     def _data_collector_loop(self):
         """
-        This loop is now much simpler. It just collects data from sensors
-        and writes it to the database.
+        Collects data from sensors and writes it to the database at the configured interval.
         """
-        # Use a shorter, more frequent interval for data collection
-        collection_interval = 30 
-        print(f"[Collector] Starting data collection loop (interval: {collection_interval}s).")
+        print(f"[Collector] Starting data collection loop (initial interval: {self.collection_interval}s).")
         
         self._stop_event.wait(5) # Initial delay
-        while not self._stop_event.is_set():
+        while not self._stop_event.wait(self.collection_interval):
             master_packet = {name: sensor.get_latest_readings() for name, sensor in self.sensors.items()}
             
             if master_packet:
@@ -111,32 +120,6 @@ class WeatherStation:
                         if value is not None:
                             self.db_manager.write_reading(self.station_id, sensor_name, metric_name, value)
                             print(f"  → Logged: {sensor_name}/{metric_name} = {value}")
-            
-            self._stop_event.wait(collection_interval)
-
-    def _config_watcher_loop(self):
-        """Monitors the config file for changes and reloads settings."""
-        while not self._stop_event.is_set():
-            try:
-                mtime = os.path.getmtime(self.config_path)
-                if mtime > self.last_config_mtime:
-                    print("\n[ConfigWatcher] Detected config file change. Reloading sensor settings...")
-                    self.reload_config()
-            except OSError as e:
-                print(f"[ConfigWatcher] ERROR: {e}")
-            self._stop_event.wait(10)
-            
-    def reload_config(self):
-        self.load_config()
-        # Update settings for running sensors
-        for sensor_obj in self.sensors.values():
-            if hasattr(sensor_obj, 'polling_rate'):
-                for conf in self.config['sensors'].values():
-                    if conf['name'] == sensor_obj.name:
-                        sensor_obj.polling_rate = conf['polling_rate']
-                        sensor_obj.metric_configs = conf['metrics']
-                        print(f"    → Updated settings for sensor '{sensor_obj.name}'")
-                        break
 
 # ============================================================================
 # SENSOR CLASSES (Largely unchanged, but simplified)
@@ -150,14 +133,17 @@ class ModbusSensor:
         self.debug = kwargs.get('debug', False)
         self.shared_port_lock = kwargs.get('lock', Lock())
         self._stop_event, self.latest_values, self._value_lock = Event(), {}, Lock()
+        self.poller_thread = None
 
     def start(self):
         if self.debug: print(f"  [Sensor] Starting poller for '{self.name}'")
-        Thread(target=self._poll, daemon=True).start()
+        self.poller_thread = Thread(target=self._poll, daemon=True)
+        self.poller_thread.start()
 
     def stop(self):
         if self.debug: print(f"  [Sensor] Stopping poller for '{self.name}'")
         self._stop_event.set()
+        self.poller_thread.join()
 
     def _apply_correction(self, raw, config):
         # Correction logic remains the same
@@ -172,7 +158,7 @@ class ModbusSensor:
 
     def _poll(self):
         time.sleep(2) # Initial delay
-        while not self._stop_event.is_set():
+        while not self._stop_event.wait(self.polling_rate):
             with self.shared_port_lock:
                 try:
                     current_values = {}
@@ -180,20 +166,14 @@ class ModbusSensor:
                         read_func_name = config.get("function", "read_register")
                         read_func = getattr(self.instrument, read_func_name)
                         
-                        # --- FIX START ---
-                        # The read_long function takes different arguments than read_register.
-                        # We need to call them with the correct set of parameters.
                         if read_func_name == 'read_long':
-                            # read_long() only takes the register address
                             raw_value = read_func(registeraddress=config["register"])
                         else:
-                            # Other functions (like read_register) take more arguments
                             raw_value = read_func(
                                 registeraddress=config["register"],
                                 number_of_decimals=config.get("decimals", 0),
                                 signed=config.get("signed", False)
                             )
-                        # --- FIX END ---
                         
                         corrected_value = self._apply_correction(raw_value, config)
                         current_values[metric_name] = round(corrected_value, 2)
@@ -203,8 +183,6 @@ class ModbusSensor:
 
                 except (IOError, ValueError) as e:
                     print(f"ERROR: Read failed for '{self.name}': {e}")
-            
-            self._stop_event.wait(self.polling_rate)
 
     def get_latest_readings(self):
         with self._value_lock:
