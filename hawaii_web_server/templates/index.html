@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sensor Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="{{ url_for('static', filename='chart.js') }}"></script>
+</head>
+<body>
+<h1></h1>
+  <div class="container">
+    <h1>Monthly Sensor Averages</h1>
+
+    <div class="sensor-box co2">CO2: <span id="co2">Loading...</span></div>
+    <div class="sensor-box pressure">Atmospheric Pressure: <span id="pressure">Loading...</span></div>
+    <div class="sensor-box wind-speed">Wind Speed: <span id="wind_speed">Loading...</span></div>
+    <div class="sensor-box wind-direction">Wind Direction: <span id="wind_direction">Loading...</span></div>
+  </div>
+
+  <div class="charts-container">
+    <div class="chart-box">
+      <h2>Average CO2 Levels by Month</h2>
+      <canvas id="co2Chart"></canvas>
+    </div>
+    <div class="chart-box">
+      <h2>Average Atmospheric Pressure by Month</h2>
+      <canvas id="pressureChart"></canvas>
+    </div>
+    <div class="chart-box">
+      <h2>Average Wind Speed by Month</h2>
+      <canvas id="windSpeedChart"></canvas>
+    </div>
+    <div class="chart-box">
+      <h2>Average Wind Direction by Month</h2>
+      <canvas id="windDirectionChart"></canvas>
+    </div>
+  </div>
+
+  <script src="{{ url_for('static', filename='charts.js') }}"></script>
+  <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
