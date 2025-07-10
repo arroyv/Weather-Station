@@ -5,12 +5,12 @@
   },
   "services": {
     "adafruit_io_enabled": true,
-    "lora_enabled": true,
+    "lora_enabled": false,
     "wifi_sync_enabled": false
   },
   "timing": {
-    "transmission_interval_seconds": 600,
-    "adafruit_io_interval_seconds": 300
+    "transmission_interval_seconds": 60,
+    "adafruit_io_interval_seconds": 60
   },
   "database": {
     "path": "weather_data.db"
