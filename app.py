@@ -70,11 +70,9 @@ def dashboard():
     config = load_config()
     enriched_data = get_enriched_data()
     
-    # Prepare station info for the template
     station_tabs = []
     local_station_id = config.get('station_info', {}).get('station_id')
     
-    # Ensure local station is first, then sort others
     sorted_station_ids = sorted(enriched_data.keys())
     if local_station_id in sorted_station_ids:
         sorted_station_ids.insert(0, sorted_station_ids.pop(sorted_station_ids.index(local_station_id)))
@@ -105,6 +103,12 @@ def settings():
             current_config['timing']['transmission_interval_seconds'] = request.form.get('transmission_interval_seconds', 60, type=int)
             current_config['timing']['adafruit_io_interval_seconds'] = request.form.get('adafruit_io_interval_seconds', 300, type=int)
 
+            # --- NEW: Update LoRa settings ---
+            current_config['lora']['role'] = request.form.get('lora_role', 'base')
+            current_config['lora']['frequency'] = request.form.get('lora_frequency', 915.0, type=float)
+            current_config['lora']['local_address'] = request.form.get('lora_local_address', 1, type=int)
+            current_config['lora']['remote_address'] = request.form.get('lora_remote_address', 2, type=int)
+
             # Update individual sensor enabled status and polling rates
             for sensor_id, sensor_config in current_config.get('sensors', {}).items():
                 sensor_name = sensor_config['name']
@@ -114,7 +118,6 @@ def settings():
                 current_config['sensors'][sensor_id]['enabled'] = enabled_field in request.form
                 current_config['sensors'][sensor_id]['polling_rate'] = request.form.get(polling_field, type=int)
 
-            # Update rain gauge enabled status
             if 'rain_gauge' in current_config:
                 current_config['rain_gauge']['enabled'] = 'enabled_rain' in request.form
 
@@ -139,7 +142,6 @@ def get_historical_data_api():
         
     data = db_manager.get_historical_data(station_id, hours)
     
-    # Process data for charting
     processed_data = {}
     config = load_config()
     
@@ -147,7 +149,6 @@ def get_historical_data_api():
         sensor = row['sensor']
         metric = row['metric']
         
-        # Find label and unit
         unit = ''
         if sensor == config.get('rain_gauge', {}).get('name'):
             unit = config['rain_gauge'].get('unit', '')
