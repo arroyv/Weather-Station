@@ -69,6 +69,7 @@ class DatabaseManager:
                     (ts, station_id, sensor, metric, value, rssi)
                 )
                 self.conn.commit()
+                print(f"inserted ({ts!r}, {station_id!r}, {sensor!r}, {metric!r}, {value!r}, {rssi!r}) into the database")
                 return cursor.lastrowid
             except sqlite3.Error as e:
                 print(f"[Database] ERROR: Failed to write reading: {e}")
