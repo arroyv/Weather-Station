@@ -107,7 +107,7 @@
             </div>
             
             <div class="card">
-                <h5>Local Sensor Polling (This Station)</h5>
+                <h5>Local Sensor Polling (This Station in Sec)</h5>
                 <div style="margin-bottom: 20px; display: flex; gap: 10px;">
                     <button type="button" class="btn btn-secondary" onclick="toggleAllSensors(true, 'local')">Enable All</button>
                     <button type="button" class="btn btn-secondary" onclick="toggleAllSensors(false, 'local')">Disable All</button>
@@ -128,7 +128,7 @@
 
             <!-- NEW: Remote Config Section -->
             <div class="card">
-                <h5>Remote Sensor Polling (Pushed via LoRa)</h5>
+                <h5>Remote Sensor Polling (Pushed via LoRa (in Sec))</h5>
                 <div class="settings-grid">
                 {% for sensor_id, sensor_config in config.remote_config_payload.sensors.items() %}
                     <div class="form-group">
