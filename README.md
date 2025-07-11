@@ -1,4 +1,4 @@
-# Weather-Sensors
+# Weather-Station
 
 ## Overview
 
