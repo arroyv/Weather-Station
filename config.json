@@ -5,7 +5,7 @@
   },
   "services": {
     "adafruit_io_enabled": true,
-    "lora_enabled": true
+    "lora_enabled": false
   },
   "timing": {
     "transmission_interval_seconds": 60,
