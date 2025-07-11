@@ -5,12 +5,11 @@
   },
   "services": {
     "adafruit_io_enabled": true,
-    "lora_enabled": false,
-    "wifi_sync_enabled": false
+    "lora_enabled": true
   },
   "timing": {
     "transmission_interval_seconds": 60,
-    "adafruit_io_interval_seconds": 60
+    "adafruit_io_interval_seconds": 300
   },
   "database": {
     "path": "weather_data.db"
@@ -22,69 +21,74 @@
     "remote_address": 2,
     "local_address": 1
   },
-  "wifi_sync": {
-    "target_url": "http://192.168.1.100:8000/api/data"
-  },
   "sensors": {
     "1": {
       "name": "soil",
-      "polling_rate": 1800,
+      "enabled": true,
       "metrics": {
-        "moisture-rh": { "register": 0, "decimals": 0, "correction": { "type": "map", "raw_min": 310, "raw_max": 780 }, "feed_key": "soil-moisture-rh" },
-        "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": { "type": "linear", "offset": 0.5 }, "feed_key": "soil-temp-c" }
+        "moisture-rh": { "register": 0, "decimals": 0, "correction": { "type": "map", "raw_min": 310, "raw_max": 780 }, "feed_key": "soil-moisture-rh", "label": "Soil Moisture", "unit": "%RH" },
+        "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": { "type": "linear", "offset": 0.5 }, "feed_key": "soil-temp-c", "label": "Soil Temperature", "unit": "°C" }
       }
     },
     "2": {
       "name": "atmosphere",
-      "polling_rate": 600,
+      "enabled": true,
       "metrics": {
-        "humidity-rh": { "register": 0, "decimals": 1, "correction": { "type": "linear", "offset": -5.0 }, "feed_key": "atmosphere-humidity-rh" },
-        "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": { "type": "linear", "offset": -1.1 }, "feed_key": "atmosphere-temp-c" }
+        "humidity-rh": { "register": 0, "decimals": 1, "correction": { "type": "linear", "offset": -5.0 }, "feed_key": "atmosphere-humidity-rh", "label": "Humidity", "unit": "%RH" },
+        "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": { "type": "linear", "offset": -1.1 }, "feed_key": "atmosphere-temp-c", "label": "Air Temperature", "unit": "°C" }
       }
     },
     "3": {
       "name": "co2",
       "polling_rate": 60,
+      "enabled": true,
       "metrics": {
-        "ppm": { "register": 0, "decimals": 0, "correction": {}, "feed_key": "co2-ppm" }
+        "ppm": { "register": 0, "decimals": 0, "correction": {}, "feed_key": "co2-ppm", "label": "CO2", "unit": "ppm" }
       }
     },
     "4": {
       "name": "light",
       "polling_rate": 300,
+      "enabled": true,
       "metrics": {
-        "lux": { "register": 0, "function": "read_long", "correction": { "type": "linear", "factor": 1.25 }, "feed_key": "light-lux" }
+        "lux": { "register": 0, "function": "read_long", "correction": { "type": "linear", "factor": 1.25 }, "feed_key": "light-lux", "label": "Light Level", "unit": "lux" }
       }
     },
     "5": {
       "name": "pressure",
       "polling_rate": 900,
+      "enabled": true,
       "metrics": {
-        "kpa": { "register": 0, "decimals": 3, "correction": { "type": "linear", "factor": 0.001 }, "feed_key": "pressure-kpa" },
-        "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": {}, "feed_key": "pressure-temp-c" }
+        "kpa": { "register": 0, "decimals": 3, "correction": { "type": "linear", "factor": 0.001 }, "feed_key": "pressure-kpa", "label": "Pressure", "unit": "kPa" },
+        "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": {}, "feed_key": "pressure-temp-c", "label": "Baro Temperature", "unit": "°C" }
       }
     },
     "6": {
       "name": "wind-direction",
       "polling_rate": 120,
+      "enabled": true,
       "metrics": {
-        "direction": { "register": 0, "decimals": 0, "correction": {}, "feed_key": "wind-direction" }
+        "direction": { "register": 0, "decimals": 0, "correction": {}, "feed_key": "wind-direction", "label": "Wind Direction", "unit": "°" }
       }
     },
     "7": {
       "name": "wind-speed",
       "polling_rate": 120,
+      "enabled": true,
       "metrics": {
-        "speed-ms": { "register": 1, "decimals": 1, "correction": {}, "feed_key": "wind-speed-ms" }
+        "speed-ms": { "register": 1, "decimals": 1, "correction": {}, "feed_key": "wind-speed-ms", "label": "Wind Speed", "unit": "m/s" }
       }
     }
   },
   "rain_gauge": {
     "name": "rain",
+    "enabled": true,
     "gpio_pin": 17,
     "mm_per_tip": 0.2765,
     "debounce_ms": 250,
     "metric": "mm",
-    "feed_key": "rain-mm"
+    "feed_key": "rain-mm",
+    "label": "Rainfall",
+    "unit": "mm"
   }
 }

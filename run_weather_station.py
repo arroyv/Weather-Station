@@ -8,7 +8,7 @@ from threading import Thread, Event
 
 from weather_station_library import WeatherStation
 from database import DatabaseManager
-from handlers import AdafruitIOHandler, LoRaHandler, WiFiSyncHandler
+from handlers import AdafruitIOHandler, LoRaHandler
 
 def load_config(path='config.json'):
     """Loads the configuration from the JSON file."""
@@ -20,8 +20,6 @@ def config_watcher_loop(config_path, weather_station, services, stop_event):
     A central loop that watches for changes in the config file and tells
     all other running services to reload their settings.
     """
-    # Use a lock to prevent race conditions if multiple services access the file
-    # Although not strictly necessary here, it's good practice.
     from threading import Lock
     file_lock = Lock()
     
@@ -84,10 +82,6 @@ if __name__ == "__main__":
     if services_config.get('lora_enabled'):
         lora_handler = LoRaHandler(config, db_manager)
         all_services.append(lora_handler)
-
-    if services_config.get('wifi_sync_enabled'):
-        wifi_handler = WiFiSyncHandler(config, db_manager)
-        all_services.append(wifi_handler)
 
     # 4. Create a shared stop event for graceful shutdown
     stop_event = Event()

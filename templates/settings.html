@@ -5,174 +5,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Station Settings</title>
     <style>
-        /* Embedded styles for offline access */
-        body {
-            font-family: Arial, sans-serif;
-            background: linear-gradient(to bottom, #dbe6f6, #c5d7f0);
-            margin: 0;
-            padding: 40px 20px;
-            color: #1a1a1a;
-            min-height: 100vh;
-            box-sizing: border-box;
-        }
-
-        .navbar {
-            background: #fff;
-            padding: 10px 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            margin-bottom: 30px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .navbar a {
-            text-decoration: none;
-            color: #00796B;
-            font-weight: 600;
-            padding: 8px 15px;
-            border-radius: 6px;
-            transition: background-color 0.3s;
-        }
-        .navbar a.brand {
-            font-size: 1.5rem;
-        }
-        .navbar a:hover, .navbar a.active {
-            background-color: #e3f2f1;
-        }
-
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-        }
-
-        h2 {
-            font-weight: 600;
-            font-size: 2rem;
-            margin-top: 0;
-            margin-bottom: 10px;
-            color: #00796B;
-            text-align: center;
-        }
-
-        .description {
-            text-align: center;
-            margin-bottom: 30px;
-            color: #555;
-        }
-
-        .card {
-            background: white;
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-            margin-bottom: 25px;
-        }
-        .card h5 {
-            font-size: 1.3rem;
-            color: #004D40;
-            margin-top: 0;
-            margin-bottom: 20px;
-            border-bottom: 2px solid #e0e0e0;
-            padding-bottom: 10px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-        .form-group label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: #333;
-        }
-        .form-group input[type="text"], .form-group input[type="number"] {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
-            box-sizing: border-box;
-            font-size: 1rem;
-        }
-        .form-group .form-text {
-            font-size: 0.85rem;
-            color: #777;
-            margin-top: 5px;
-        }
-
-        /* Custom Switch */
-        .form-switch {
-            display: flex;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-        .form-switch input {
-            display: none;
-        }
-        .form-switch label {
-            margin: 0;
-            margin-left: 12px;
-            cursor: pointer;
-        }
-        .form-switch .switch-track {
-            position: relative;
-            height: 26px;
-            width: 50px;
-            background: #ccc;
-            border-radius: 13px;
-            cursor: pointer;
-            transition: background-color 0.2s;
-        }
-        .form-switch .switch-thumb {
-            position: absolute;
-            height: 22px;
-            width: 22px;
-            top: 2px;
-            left: 2px;
-            background: white;
-            border-radius: 50%;
-            transition: transform 0.2s;
-        }
-        .form-switch input:checked + .switch-track {
-            background: #00796B;
-        }
-        .form-switch input:checked + .switch-track .switch-thumb {
-            transform: translateX(24px);
-        }
-
-        .btn-primary {
-            display: block;
-            width: 100%;
-            padding: 12px;
-            background-color: #00796B;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-        .btn-primary:hover {
-            background-color: #004D40;
-        }
-
-        .alert {
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 8px;
-            border: 1px solid transparent;
-        }
-        .alert-success {
-            color: #155724;
-            background-color: #d4edda;
-            border-color: #c3e6cb;
-        }
-        .alert-danger {
-            color: #721c24;
-            background-color: #f8d7da;
-            border-color: #f5c6cb;
-        }
+        body { font-family: Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; color: #333; }
+        .navbar { background: #fff; padding: 10px 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .navbar a { text-decoration: none; color: #00796B; font-weight: 600; padding: 8px 15px; border-radius: 6px; }
+        .navbar a.brand { font-size: 1.5rem; }
+        .navbar a:hover, .navbar a.active { background-color: #e3f2f1; }
+        .container { max-width: 800px; margin: 0 auto; }
+        h2 { font-weight: 600; font-size: 2rem; margin-bottom: 10px; color: #00796B; text-align: center; }
+        .description { text-align: center; margin-bottom: 20px; color: #555; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 25px; }
+        .card h5 { font-size: 1.3rem; color: #004D40; margin-top: 0; margin-bottom: 20px; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; }
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; font-weight: 600; margin-bottom: 8px; }
+        .form-group input[type="text"], .form-group input[type="number"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 1rem; }
+        .form-group .form-text { font-size: 0.85rem; color: #777; margin-top: 5px; }
+        .form-switch { display: flex; align-items: center; margin-bottom: 15px; }
+        .form-switch input { opacity: 0; width: 0; height: 0; }
+        .switch-label { margin-left: 12px; cursor: pointer; }
+        .switch-track { position: relative; height: 26px; width: 50px; background: #ccc; border-radius: 13px; cursor: pointer; transition: background-color 0.2s; }
+        .switch-thumb { position: absolute; height: 22px; width: 22px; top: 2px; left: 2px; background: white; border-radius: 50%; transition: transform 0.2s; }
+        .form-switch input:checked + .switch-track { background: #00796B; }
+        .form-switch input:checked + .switch-track .switch-thumb { transform: translateX(24px); }
+        .btn { padding: 8px 16px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; transition: background-color 0.3s; }
+        .btn-primary { background-color: #00796B; color: white; display: block; width: 100%; padding: 12px; font-size: 1.1rem; }
+        .btn-primary:hover { background-color: #004D40; }
+        .btn-secondary { background-color: #6c757d; color: white; }
+        .btn-secondary:hover { background-color: #5a6268; }
+        .alert { padding: 15px; margin-bottom: 20px; border-radius: 8px; border: 1px solid transparent; }
+        .alert-success { color: #155724; background-color: #d4edda; border-color: #c3e6cb; }
+        .alert-danger { color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; }
+        .sensor-status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
     </style>
 </head>
 <body>
@@ -191,9 +53,7 @@
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                <div class="alert alert-{{ category }}">
-                    {{ message }}
-                </div>
+                <div class="alert alert-{{ category }}">{{ message }}</div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
@@ -212,57 +72,55 @@
                 <div class="form-switch">
                     <input type="checkbox" id="adafruit_io_enabled" name="adafruit_io_enabled" {% if config.services.adafruit_io_enabled %}checked{% endif %}>
                     <label for="adafruit_io_enabled" class="switch-track"><span class="switch-thumb"></span></label>
-                    <label for="adafruit_io_enabled">Adafruit IO Upload</label>
+                    <label for="adafruit_io_enabled" class="switch-label">Adafruit IO Upload</label>
                 </div>
                 <div class="form-switch">
                     <input type="checkbox" id="lora_enabled" name="lora_enabled" {% if config.services.lora_enabled %}checked{% endif %}>
                     <label for="lora_enabled" class="switch-track"><span class="switch-thumb"></span></label>
-                    <label for="lora_enabled">LoRa Communication</label>
-                </div>
-                <div class="form-switch">
-                    <input type="checkbox" id="wifi_sync_enabled" name="wifi_sync_enabled" {% if config.services.wifi_sync_enabled %}checked{% endif %}>
-                    <label for="wifi_sync_enabled" class="switch-track"><span class="switch-thumb"></span></label>
-                    <label for="wifi_sync_enabled">WiFi Sync to Central Server</label>
-                </div>
-            </div>
-            
-            <div class="card">
-                <h5>Service Timing Intervals (in seconds)</h5>
-                <div class="form-group">
-                    <label for="transmission_interval_seconds">LoRa & WiFi Transmission Interval</label>
-                    <input type="number" id="transmission_interval_seconds" name="transmission_interval_seconds" value="{{ config.timing.transmission_interval_seconds }}">
-                    <div class="form-text">How often the station attempts to send data via LoRa or WiFi Sync.</div>
-                </div>
-                <div class="form-group">
-                    <label for="adafruit_io_interval_seconds">Adafruit IO Upload Interval</label>
-                    <input type="number" id="adafruit_io_interval_seconds" name="adafruit_io_interval_seconds" value="{{ config.timing.adafruit_io_interval_seconds }}">
-                    <div class="form-text">How often the station sends the latest data to Adafruit IO.</div>
+                    <label for="lora_enabled" class="switch-label">LoRa Communication</label>
                 </div>
             </div>
 
             <div class="card">
-                <h5>Sensor Polling Rates (in seconds)</h5>
-                <p class="form-text" style="margin-top: -10px; margin-bottom: 15px;">How often each physical sensor is read.</p>
-                {% for sensor_id, sensor_config in config.sensors.items() %}
+                <h5>Sensor Status & Polling Rates (seconds)</h5>
+                <div style="margin-bottom: 20px; display: flex; gap: 10px;">
+                    <button type="button" class="btn btn-secondary" onclick="toggleAllSensors(true)">Enable All</button>
+                    <button type="button" class="btn btn-secondary" onclick="toggleAllSensors(false)">Disable All</button>
+                </div>
+                <div class="sensor-status-grid">
+                    {% for sensor_id, sensor_config in config.sensors.items() %}
                     <div class="form-group">
-                        <label for="polling_rate_{{ sensor_config.name }}" class="text-capitalize">{{ sensor_config.name }}</label>
+                        <div class="form-switch">
+                            <input type="checkbox" class="sensor-toggle" id="enabled_{{ sensor_config.name }}" name="enabled_{{ sensor_config.name }}" {% if sensor_config.enabled %}checked{% endif %}>
+                            <label for="enabled_{{ sensor_config.name }}" class="switch-track"><span class="switch-thumb"></span></label>
+                            <label for="enabled_{{ sensor_config.name }}" class="switch-label text-capitalize">{{ sensor_config.name }}</label>
+                        </div>
                         <input type="number" id="polling_rate_{{ sensor_config.name }}" name="polling_rate_{{ sensor_config.name }}" value="{{ sensor_config.polling_rate }}">
                     </div>
-                {% endfor %}
-            </div>
-
-            <div class="card">
-                <h5>WiFi Sync Configuration</h5>
-                <div class="form-group">
-                    <label for="target_url">Target Server URL</label>
-                    <input type="text" id="target_url" name="target_url" placeholder="http://jetson-nano-ip:port/api/data" value="{{ config.wifi_sync.target_url }}">
-                    <div class="form-text">The full URL of the API endpoint on the Jetson Nano to receive data.</div>
+                    {% endfor %}
+                    <!-- Rain Gauge -->
+                    {% if 'rain_gauge' in config %}
+                    <div class="form-group">
+                         <div class="form-switch">
+                            <input type="checkbox" class="sensor-toggle" id="enabled_rain" name="enabled_rain" {% if config.rain_gauge.enabled %}checked{% endif %}>
+                            <label for="enabled_rain" class="switch-track"><span class="switch-thumb"></span></label>
+                            <label for="enabled_rain" class="switch-label text-capitalize">Rain Gauge</label>
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
 
-            <button type="submit" class="btn-primary">Save Settings</button>
+            <button type="submit" class="btn btn-primary">Save Settings</button>
         </form>
     </div>
-
+    <script>
+        function toggleAllSensors(enable) {
+            const checkboxes = document.querySelectorAll('.sensor-toggle');
+            checkboxes.forEach(cb => {
+                cb.checked = enable;
+            });
+        }
+    </script>
 </body>
 </html>

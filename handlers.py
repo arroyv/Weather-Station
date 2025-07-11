@@ -1,7 +1,7 @@
 # handlers.py
 import time
 import json
-import requests # Used for WiFi sync
+import requests # Used for WiFi sync, but not in this version
 from threading import Thread, Event
 # NOTE: You will need to install a LoRa library, e.g., 'pip install pyLora'
 # And then import it here. For now, we simulate it.
@@ -48,32 +48,24 @@ class AdafruitIOHandler(BaseHandler):
         self.aio_client = aio_client
         self.aio_prefix = aio_prefix
         self.last_sent_ids = {}
-        # A cache to store looked-up feed keys to avoid repeated searching
         self._feed_key_cache = {}
         super().__init__(config, db_manager)
 
     def update_interval(self):
         self.interval = self.config.get('timing', {}).get('adafruit_io_interval_seconds', 300)
-        # Clear the cache when config is updated so keys are re-read
         self._feed_key_cache = {}
 
     def _get_feed_key(self, sensor_name, metric_name):
-        """
-        Looks up the specific feed_key from the config file.
-        Caches results for efficiency.
-        """
         cache_key = f"{sensor_name}.{metric_name}"
         if cache_key in self._feed_key_cache:
             return self._feed_key_cache[cache_key]
 
-        # Handle rain gauge as a special case
         if sensor_name == self.config.get('rain_gauge', {}).get('name'):
             key = self.config['rain_gauge'].get('feed_key')
             if key:
                 self._feed_key_cache[cache_key] = key
                 return key
 
-        # Search through the modbus sensors
         for sensor_config in self.config.get('sensors', {}).values():
             if sensor_config.get('name') == sensor_name:
                 metric_config = sensor_config.get('metrics', {}).get(metric_name)
@@ -82,8 +74,6 @@ class AdafruitIOHandler(BaseHandler):
                     self._feed_key_cache[cache_key] = key
                     return key
         
-        # Fallback if no specific key is found
-        print(f"[{self.name}] WARNING: No specific 'feed_key' found for {sensor_name}/{metric_name}. Building one from names.")
         fallback_key = f"{sensor_name}-{metric_name}"
         self._feed_key_cache[cache_key] = fallback_key
         return fallback_key
@@ -91,7 +81,7 @@ class AdafruitIOHandler(BaseHandler):
     def loop(self):
         while not self._stop_event.wait(self.interval):
             if not self.config.get('services', {}).get('adafruit_io_enabled', False):
-                continue # Skip if disabled
+                continue
 
             print(f"[{self.name}] Checking for new data to upload...")
             latest_readings = self.db.get_latest_readings()
@@ -100,14 +90,11 @@ class AdafruitIOHandler(BaseHandler):
                 record_id = data['id']
                 if self.last_sent_ids.get(key) != record_id:
                     try:
-                        # --- FIX: Look up the feed_key from the config instead of just building it. ---
                         sensor_name = data['sensor']
                         metric_name = data['metric']
-                        
                         feed_key = self._get_feed_key(sensor_name, metric_name)
                         
                         if not feed_key:
-                            print(f"[{self.name}] ERROR: Could not determine feed key for {sensor_name}/{metric_name}. Skipping.")
                             continue
 
                         full_feed_id = f"{self.aio_prefix}.{feed_key}"
@@ -121,78 +108,107 @@ class AdafruitIOHandler(BaseHandler):
 
 class LoRaHandler(BaseHandler):
     """
-    Handles sending and receiving data via LoRa.
+    Handles sending (remote role) and receiving (base role) data via LoRa.
     """
     def __init__(self, config, db_manager):
-        self.last_sent_id = 0
+        # last_sent_id tracks the last record ID sent from this station's DB
+        self.last_sent_id = 0 
         super().__init__(config, db_manager)
+        
+        # --- PLACEHOLDER for actual LoRa hardware setup ---
+        # self.lora = LoRa(device=self.lora_config.get('device'), freq=self.lora_config.get('frequency'))
+        # self.lora.set_addr(self.lora_config.get('local_address'))
+        print(f"[{self.name}] Initialized. (SIMULATED LoRa)")
+        # --- END PLACEHOLDER ---
+        
+        # Start the appropriate loop based on role
         if self.role == 'base':
-            Thread(target=self.receive_loop, daemon=True).start()
+            self.receive_thread = Thread(target=self.receive_loop, daemon=True)
+            self.receive_thread.start()
+        elif self.role == 'remote':
+            self.send_thread = Thread(target=self.send_loop, daemon=True)
+            self.send_thread.start()
 
     def update_interval(self):
-        self.interval = self.config.get('timing', {}).get('transmission_interval_seconds', 600)
+        self.interval = self.config.get('timing', {}).get('transmission_interval_seconds', 60)
         self.lora_config = self.config.get('lora', {})
         self.station_id = self.config.get('station_info', {}).get('station_id', 0)
         self.role = self.lora_config.get('role')
 
     def loop(self):
-        """This loop is for SENDING data (for 'remote' stations)."""
+        """The main loop just keeps the thread alive. Work is done in send/receive loops."""
         while not self._stop_event.is_set():
-            # Use a short sleep here and check the main interval inside the loop
-            # This makes the service more responsive to the stop event.
-            if self._stop_event.wait(self.interval):
-                break
+            time.sleep(1)
 
-            if not self.config.get('services', {}).get('lora_enabled', False) or self.role != 'remote':
+    def send_loop(self):
+        """This loop is for SENDING data (for 'remote' stations)."""
+        print(f"[{self.name}] Starting send loop (interval: {self.interval}s).")
+        while not self._stop_event.wait(self.interval):
+            if not self.config.get('services', {}).get('lora_enabled', False):
                 continue
 
-            latest_readings = self.db.get_latest_readings()
-            if latest_readings:
-                key = sorted(latest_readings.keys())[0]
-                data_to_send = latest_readings[key]
-                if data_to_send['id'] > self.last_sent_id:
-                    payload = json.dumps(data_to_send)
-                    print(f"[{self.name}] SIMULATING LORA SEND: {payload}")
-                    self.last_sent_id = data_to_send['id']
+            # Get all data for THIS station that hasn't been sent yet
+            records_to_send = self.db.get_unsent_lora_data(self.station_id, self.last_sent_id)
+            if not records_to_send:
+                continue
+
+            # Convert sqlite3.Row objects to plain dictionaries for JSON serialization
+            payload = [dict(row) for row in records_to_send]
+            
+            print(f"[{self.name}] Preparing to send {len(payload)} records via LoRa...")
+            try:
+                # --- PLACEHOLDER for sending ---
+                # self.lora.send_to(json.dumps(payload).encode(), self.lora_config.get('remote_address'))
+                print(f"[{self.name}] SIMULATING LORA SEND: {json.dumps(payload)}")
+                # --- END PLACEHOLDER ---
+                
+                # If send was successful, update the last sent ID
+                self.last_sent_id = payload[-1]['id']
+
+            except Exception as e:
+                print(f"[{self.name}] ERROR sending LoRa data: {e}")
+
 
     def receive_loop(self):
         """This loop is for RECEIVING data (for 'base' stations)."""
-        print(f"[{self.name}] Listening for incoming LoRa data...")
+        print(f"[{self.name}] Starting receive loop.")
         while not self._stop_event.is_set():
-            if self.config.get('services', {}).get('lora_enabled', False) and self.role == 'base':
-                # Placeholder for actual LoRa receiving logic
-                pass
-            time.sleep(5)
-
-class WiFiSyncHandler(BaseHandler):
-    """
-    Periodically sends unsynced data to a central server.
-    """
-    def update_interval(self):
-        self.interval = self.config.get('timing', {}).get('transmission_interval_seconds', 600)
-        self.sync_config = self.config.get('wifi_sync', {})
-        self.target_url = self.sync_config.get('target_url')
-
-    def loop(self):
-        while not self._stop_event.wait(self.interval):
-            if not self.config.get('services', {}).get('wifi_sync_enabled', False) or not self.target_url:
+            if not self.config.get('services', {}).get('lora_enabled', False):
+                time.sleep(5)
                 continue
 
-            unsynced_rows = self.db.get_unsynced_data(limit=100)
-            if not unsynced_rows:
-                print(f"[{self.name}] No new data to sync.")
-                continue
-
-            payload = [dict(row) for row in unsynced_rows]
-            record_ids = [row['id'] for row in unsynced_rows]
-            
-            print(f"[{self.name}] Attempting to sync {len(payload)} records to {self.target_url}...")
             try:
-                response = requests.post(self.target_url, json=payload, timeout=15)
-                if response.status_code == 200:
-                    print(f"[{self.name}] Sync successful.")
-                    self.db.mark_data_as_synced(record_ids)
-                else:
-                    print(f"[{self.name}] ERROR: Sync failed. Server returned status {response.status_code}: {response.text}")
-            except requests.RequestException as e:
-                print(f"[{self.name}] ERROR: Could not connect to sync server: {e}")
+                # --- PLACEHOLDER for receiving ---
+                # has_message, payload, rssi, snr = self.lora.receive()
+                # if has_message:
+                #     data_batch = json.loads(payload.decode())
+                # --- END PLACEHOLDER ---
+                
+                # SIMULATION: To test, you can manually create a fake payload here
+                # For example:
+                # data_batch = [{'id': 1, 'timestamp': '2025-07-11T16:00:00Z', 'station_id': 2, 'sensor': 'soil', 'metric': 'temp-c', 'value': 25.5}]
+                # rssi = -55
+                
+                # For now, we'll just simulate that we don't receive anything
+                has_message = False
+                if not has_message:
+                    time.sleep(2) # Don't busy-wait
+                    continue
+
+                print(f"[{self.name}] Received LoRa packet with RSSI: {rssi}. Contains {len(data_batch)} records.")
+                
+                for record in data_batch:
+                    self.db.write_reading(
+                        station_id=record['station_id'],
+                        sensor=record['sensor'],
+                        metric=record['metric'],
+                        value=record['value'],
+                        rssi=rssi,
+                        timestamp=record['timestamp'] # Use the original timestamp
+                    )
+                print(f"[{self.name}] Successfully logged {len(data_batch)} records from remote station.")
+
+            except json.JSONDecodeError:
+                print(f"[{self.name}] ERROR: Received malformed JSON in LoRa packet.")
+            except Exception as e:
+                print(f"[{self.name}] ERROR in receive loop: {e}")
