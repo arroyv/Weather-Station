@@ -13,7 +13,7 @@
     "lora_time_sync_interval_seconds": 3600
   },
   "database": {
-    "path": "weather_data.db"
+    "path": "/media/TestWeatherStation/WSS/weather_data.db"
   },
   "lora": {
     "role": "base",
