@@ -9,7 +9,8 @@
   },
   "timing": {
     "transmission_interval_seconds": 60,
-    "adafruit_io_interval_seconds": 300
+    "adafruit_io_interval_seconds": 300,
+    "lora_time_sync_interval_seconds": 3600
   },
   "database": {
     "path": "weather_data.db"
@@ -21,10 +22,23 @@
     "remote_address": 2,
     "local_address": 1
   },
+  "remote_config_payload": {
+    "comment": "Settings in this section will be sent to the remote node.",
+    "sensors": {
+      "1": { "polling_rate": 1800 },
+      "2": { "polling_rate": 600 },
+      "3": { "polling_rate": 60 },
+      "4": { "polling_rate": 300 },
+      "5": { "polling_rate": 900 },
+      "6": { "polling_rate": 120 },
+      "7": { "polling_rate": 120 }
+    }
+  },
   "sensors": {
     "1": {
       "name": "soil",
       "enabled": true,
+      "polling_rate": 1800,
       "metrics": {
         "moisture-rh": { "register": 0, "decimals": 0, "correction": { "type": "map", "raw_min": 310, "raw_max": 780 }, "feed_key": "soil-moisture-rh", "label": "Soil Moisture", "unit": "%RH" },
         "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": { "type": "linear", "offset": 0.5 }, "feed_key": "soil-temp-c", "label": "Soil Temperature", "unit": "°C" }
@@ -33,6 +47,7 @@
     "2": {
       "name": "atmosphere",
       "enabled": true,
+      "polling_rate": 600,
       "metrics": {
         "humidity-rh": { "register": 0, "decimals": 1, "correction": { "type": "linear", "offset": -5.0 }, "feed_key": "atmosphere-humidity-rh", "label": "Humidity", "unit": "%RH" },
         "temp-c": { "register": 1, "decimals": 1, "signed": true, "correction": { "type": "linear", "offset": -1.1 }, "feed_key": "atmosphere-temp-c", "label": "Air Temperature", "unit": "°C" }
