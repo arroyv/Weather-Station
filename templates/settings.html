@@ -5,42 +5,225 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Station Settings</title>
     <style>
-        body { font-family: Arial, sans-serif; background: #f0f2f5; margin: 0; padding: 20px; color: #333; }
-        .navbar { background: #fff; padding: 10px 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
-        .navbar a { text-decoration: none; color: #00796B; font-weight: 600; padding: 8px 15px; border-radius: 6px; }
-        .navbar a.brand { font-size: 1.5rem; }
-        .navbar a:hover, .navbar a.active { background-color: #e3f2f1; }
-        .container { max-width: 800px; margin: 0 auto; }
-        h2 { font-weight: 600; font-size: 2rem; margin-bottom: 10px; color: #00796B; text-align: center; }
-        .description { text-align: center; margin-bottom: 20px; color: #555; }
-        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 25px; }
-        .card h5 { font-size: 1.3rem; color: #004D40; margin-top: 0; margin-bottom: 20px; border-bottom: 2px solid #e0e0e0; padding-bottom: 10px; }
-        .form-group { margin-bottom: 20px; }
-        .form-group label { display: block; font-weight: 600; margin-bottom: 8px; }
-        .form-group input[type="text"], .form-group input[type="number"], .form-group input[type="float"], .form-group select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 1rem; }
-        .form-group .form-text { font-size: 0.85rem; color: #777; margin-top: 5px; }
-        .form-switch { display: flex; align-items: center; margin-bottom: 15px; }
-        .form-switch input { opacity: 0; width: 0; height: 0; }
-        .switch-label { margin-left: 12px; cursor: pointer; }
-        .switch-track { position: relative; height: 26px; width: 50px; background: #ccc; border-radius: 13px; cursor: pointer; transition: background-color 0.2s; }
-        .switch-thumb { position: absolute; height: 22px; width: 22px; top: 2px; left: 2px; background: white; border-radius: 50%; transition: transform 0.2s; }
-        .form-switch input:checked + .switch-track { background: #00796B; }
-        .form-switch input:checked + .switch-track .switch-thumb { transform: translateX(24px); }
-        .btn { padding: 8px 16px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; transition: background-color 0.3s; }
-        .btn-primary { background-color: #00796B; color: white; display: block; width: 100%; padding: 12px; font-size: 1.1rem; }
-        .btn-primary:hover { background-color: #004D40; }
-        .btn-secondary { background-color: #6c757d; color: white; }
-        .btn-secondary:hover { background-color: #5a6268; }
-        .alert { padding: 15px; margin-bottom: 20px; border-radius: 8px; border: 1px solid transparent; }
-        .alert-success { color: #155724; background-color: #d4edda; border-color: #c3e6cb; }
-        .alert-danger { color: #721c24; background-color: #f8d7da; border-color: #f5c6cb; }
-        .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        * {
+            box-sizing: border-box;
+        }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
+            background: #f4f7f9; 
+            margin: 0; 
+            padding: 20px; 
+            color: #333; 
+        }
+        .navbar { 
+            background: #ffffff; 
+            padding: 10px 25px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
+            margin-bottom: 30px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .navbar .nav-links a { 
+            text-decoration: none; 
+            color: #00796B; 
+            font-weight: 600; 
+            padding: 10px 18px; 
+            border-radius: 8px;
+            transition: background-color 0.2s ease-in-out;
+        }
+        .navbar a.brand { 
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: #004D40;
+        }
+        .navbar .nav-links a:hover, .navbar .nav-links a.active { 
+            background-color: #e0f2f1; 
+        }
+        .container { 
+            max-width: 800px; 
+            margin: 0 auto; 
+        }
+        h2 { 
+            font-weight: 700; 
+            font-size: 2rem; 
+            margin-bottom: 10px; 
+            color: #004D40; 
+            text-align: center; 
+        }
+        .description { 
+            text-align: center; 
+            margin-bottom: 30px; 
+            color: #6c757d; 
+            font-size: 1.1rem;
+        }
+        .card { 
+            background: white; 
+            padding: 30px; 
+            border-radius: 15px; 
+            box-shadow: 0 5px 20px rgba(0,0,0,0.06); 
+            margin-bottom: 30px; 
+            border: 1px solid #e9ecef;
+        }
+        .card h5 { 
+            font-size: 1.4rem; 
+            color: #004D40; 
+            margin-top: 0; 
+            margin-bottom: 25px; 
+            border-bottom: 2px solid #e0e0e0; 
+            padding-bottom: 15px; 
+        }
+        .form-group { 
+            margin-bottom: 25px; 
+        }
+        .form-group label { 
+            display: block; 
+            font-weight: 600; 
+            margin-bottom: 10px; 
+            color: #495057;
+        }
+        .form-group input[type="text"], 
+        .form-group input[type="number"], 
+        .form-group input[type="float"], 
+        .form-group select { 
+            width: 100%; 
+            padding: 12px; 
+            border: 1px solid #ced4da; 
+            border-radius: 8px; 
+            box-sizing: border-box; 
+            font-size: 1rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .form-group input:focus, .form-group select:focus {
+            border-color: #00796B;
+            box-shadow: 0 0 0 3px rgba(0, 121, 107, 0.15);
+            outline: none;
+        }
+        .form-group .form-text { 
+            font-size: 0.9rem; 
+            color: #6c757d; 
+            margin-top: 8px; 
+        }
+        .form-switch { 
+            display: flex; 
+            align-items: center; 
+            margin-bottom: 15px; 
+        }
+        .form-switch input { 
+            opacity: 0; 
+            width: 0; 
+            height: 0; 
+        }
+        .switch-label { 
+            margin-left: 12px; 
+            cursor: pointer; 
+            font-weight: 600;
+        }
+        .switch-track { 
+            position: relative; 
+            height: 26px; 
+            width: 50px; 
+            background: #ced4da; 
+            border-radius: 13px; 
+            cursor: pointer; 
+            transition: background-color 0.2s ease-in-out; 
+        }
+        .switch-thumb { 
+            position: absolute; 
+            height: 22px; 
+            width: 22px; 
+            top: 2px; 
+            left: 2px; 
+            background: white; 
+            border-radius: 50%; 
+            transition: transform 0.2s ease-in-out; 
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+        .form-switch input:checked + .switch-track { 
+            background: #00796B; 
+        }
+        .form-switch input:checked + .switch-track .switch-thumb { 
+            transform: translateX(24px); 
+        }
+        .btn { 
+            padding: 10px 20px; 
+            border: none; 
+            border-radius: 8px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            transition: background-color 0.2s, transform 0.1s; 
+        }
+        .btn:active {
+            transform: translateY(1px);
+        }
+        .btn-primary { 
+            background-color: #00796B; 
+            color: white; 
+            display: block; 
+            width: 100%; 
+            padding: 15px; 
+            font-size: 1.1rem; 
+        }
+        .btn-primary:hover { 
+            background-color: #00695C; 
+        }
+        .btn-secondary { 
+            background-color: #6c757d; 
+            color: white; 
+        }
+        .btn-secondary:hover { 
+            background-color: #5a6268; 
+        }
+        .alert { 
+            padding: 15px; 
+            margin-bottom: 20px; 
+            border-radius: 8px; 
+            border: 1px solid transparent; 
+            font-weight: 600;
+        }
+        .alert-success { 
+            color: #0f5132; 
+            background-color: #d1e7dd; 
+            border-color: #badbcc; 
+        }
+        .alert-danger { 
+            color: #842029; 
+            background-color: #f8d7da; 
+            border-color: #f5c2c7; 
+        }
+        .settings-grid { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 25px; 
+        }
+
+        /* --- Responsive Design for Tablets and Phones --- */
+        @media (max-width: 768px) {
+            body {
+                padding: 15px;
+            }
+            .navbar {
+                flex-direction: column;
+                gap: 10px;
+            }
+            .settings-grid {
+                grid-template-columns: 1fr;
+            }
+            .card {
+                padding: 20px;
+            }
+            h2 {
+                font-size: 1.8rem;
+            }
+        }
     </style>
 </head>
 <body>
     <nav class="navbar">
         <a href="/" class="brand">{{ config.station_info.station_name }}</a>
-        <div>
+        <div class="nav-links">
             <a href="{{ url_for('dashboard') }}">Dashboard</a>
             <a href="{{ url_for('settings') }}" class="active">Settings</a>
         </div>
@@ -83,7 +266,6 @@
                 </div>
             </div>
 
-            <!-- NEW LORA CONFIGURATION CARD -->
             <div class="card">
                 <h5>LoRa Configuration</h5>
                 <div class="settings-grid">
