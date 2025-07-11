@@ -56,7 +56,7 @@
                     <div class="sensor-box">
                         <span class="value">{{ '%.2f'|format(reading.value) }}<span class="unit">{{ reading.unit }}</span></span>
                         <span class="label">{{ reading.label }}</span>
-                        <span class="timestamp">Updated: {{ reading.timestamp | replace("T", " ") | slice(0, 19) }} UTC</span>
+                        <span class="timestamp">Updated: {{ reading.timestamp.replace("T", " ")[:19] }} UTC</span>
                         {% if reading.rssi %}
                             <span class="badge">RSSI: {{ reading.rssi }}</span>
                         {% endif %}
