@@ -36,7 +36,7 @@ class WeatherStation:
                 for s_conf in self.config.get('sensors', {}).values():
                     if s_conf['name'] == sensor_obj.name:
                         sensor_obj.update_config(s_conf)
-                        print(f"    → Updated settings for sensor '{sensor_obj.name}'")
+                        print(f"Updated settings for sensor '{sensor_obj.name}'")
                         sensor_found_in_config = True
                         break
                 if not sensor_found_in_config:
@@ -56,14 +56,14 @@ class WeatherStation:
         for addr_str, s_conf in config.get('sensors', {}).items():
             # --- NEW: Check if sensor is enabled before discovering ---
             if not s_conf.get('enabled', False):
-                print(f"    → Sensor '{s_conf['name']}' is disabled. Skipping.")
+                print(f"Sensor '{s_conf['name']}' is disabled. Skipping.")
                 continue
 
             addr = int(addr_str)
             for port in ports_to_scan:
                 if os.path.exists(port):
                     if self._test_sensor_at_location(port, addr, 4800):
-                        print(f"    → Found '{s_conf['name']}' (addr {addr}) on {port}")
+                        print(f"Found '{s_conf['name']}' (addr {addr}) on {port}")
                         found_addrs[addr] = port
                         break
 
@@ -85,7 +85,7 @@ class WeatherStation:
             )
             self.add_sensor(rg_conf['name'], rain_sensor)
         elif rg_conf:
-            print(f"    → Sensor '{rg_conf['name']}' is disabled. Skipping.")
+            print(f"Sensor '{rg_conf['name']}' is disabled. Skipping.")
 
 
     def start(self):
@@ -185,7 +185,7 @@ class ModbusSensor:
                         
                         if corrected_value is not None:
                             self.db_manager.write_reading(self.station_id, self.name, metric_name, corrected_value)
-                            if self.debug: print(f"  → Logged: {self.name}/{metric_name} = {corrected_value:.2f}")
+                            if self.debug: print(f"Logged: {self.name}/{metric_name} = {corrected_value:.2f}")
 
                 except (IOError, ValueError) as e:
                     print(f"ERROR: Read failed for '{self.name}': {e}")
@@ -227,4 +227,4 @@ class RainGaugeSensor:
         if self.enabled:
             tip_value = self.mm_per_tip
             self.db_manager.write_reading(self.station_id, self.name, self.metric, tip_value)
-            if self.debug: print(f"  → Logged: [Tipped!] Rain gauge event. Value: {tip_value}")
+            if self.debug: print(f"Logged: [Tipped!] Rain gauge event. Value: {tip_value}")
