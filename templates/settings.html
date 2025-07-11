@@ -91,6 +91,10 @@
                         <label for="lora_frequency">Frequency (MHz)</label>
                         <input type="float" id="lora_frequency" name="lora_frequency" value="{{ config.lora.frequency }}">
                     </div>
+                     <div class="form-group">
+                        <label for="lora_tx_power">TX Power (5-23)</label>
+                        <input type="number" id="lora_tx_power" name="lora_tx_power" value="{{ config.lora.tx_power }}">
+                    </div>
                     <div class="form-group">
                         <label for="lora_local_address">Local Address</label>
                         <input type="number" id="lora_local_address" name="lora_local_address" value="{{ config.lora.local_address }}">

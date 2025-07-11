@@ -3,11 +3,14 @@ import time
 import json
 import os
 import datetime
-from threading import Thread, Event
+from threading import Thread, Event, Lock
 from Adafruit_IO import Client
-# NOTE: You will need to install a LoRa library, e.g., 'pip install pyLora'
-# And then import it here. For now, we simulate it.
-# from pyLora import LoRa
+
+# Import hardware-specific libraries
+import board
+import busio
+from digitalio import DigitalInOut
+import adafruit_rfm9x
 
 class BaseHandler(Thread):
     def __init__(self, config, db_manager):
@@ -68,32 +71,56 @@ class AdafruitIOHandler(BaseHandler):
         while not self._stop_event.wait(self.interval):
             if not self.config.get('services', {}).get('adafruit_io_enabled', False): continue
             print(f"[{self.name}] Checking for new data to upload...")
-            latest_readings = self.db.get_latest_readings()
-            for key, data in latest_readings.items():
-                if self.last_sent_ids.get(key) != data['id']:
-                    try:
-                        feed_key = self._get_feed_key(data['sensor'], data['metric'])
-                        if not feed_key: continue
-                        full_feed_id = f"{self.aio_prefix}.{feed_key}"
-                        print(f"[{self.name}] Sending {data['value']:.2f} to {full_feed_id}")
-                        self.aio_client.send_data(full_feed_id, data['value'])
-                        self.last_sent_ids[key] = data['id']
-                    except Exception as e:
-                        print(f"[{self.name}] ERROR sending data for {key}: {e}")
+            # Note: This sends data from ALL stations received by a base station
+            latest_readings_by_station = self.db.get_latest_readings_by_station()
+            for station_id, readings in latest_readings_by_station.items():
+                for key, data in readings.items():
+                    if self.last_sent_ids.get(key) != data['id']:
+                        try:
+                            feed_key = self._get_feed_key(data['sensor'], data['metric'])
+                            if not feed_key: continue
+                            # Add station ID to feed key for uniqueness
+                            full_feed_id = f"{self.aio_prefix}.station-{station_id}.{feed_key}"
+                            print(f"[{self.name}] Sending {data['value']:.2f} to {full_feed_id}")
+                            self.aio_client.send_data(full_feed_id, data['value'])
+                            self.last_sent_ids[key] = data['id']
+                        except Exception as e:
+                            print(f"[{self.name}] ERROR sending data for {key}: {e}")
 
 class LoRaHandler(BaseHandler):
     def __init__(self, config, db_manager):
         self.last_data_sent_id = 0
         self.last_config_sent_time = 0
+        self.rfm9x = None
+        self.lora_lock = Lock()
         super().__init__(config, db_manager)
-        print(f"[{self.name}] Initialized in '{self.role}' role. (SIMULATED LoRa)")
-        # Both roles now need to listen
-        self.receive_thread = Thread(target=self.receive_loop, daemon=True)
-        self.receive_thread.start()
-        # Only start send loop if it's a base or remote
-        if self.role in ['base', 'remote']:
-            self.send_thread = Thread(target=self.send_loop, daemon=True)
-            self.send_thread.start()
+        
+        self.init_lora_hardware()
+
+        if self.rfm9x:
+            print(f"[{self.name}] Initialized in '{self.role}' role.")
+            self.receive_thread = Thread(target=self.receive_loop, daemon=True)
+            self.receive_thread.start()
+            if self.role in ['base', 'remote']:
+                self.send_thread = Thread(target=self.send_loop, daemon=True)
+                self.send_thread.start()
+        else:
+            print(f"[{self.name}] LoRa hardware not found. Handler will be inactive.")
+
+    def init_lora_hardware(self):
+        try:
+            CS = DigitalInOut(board.CE1)
+            RESET = DigitalInOut(board.D25)
+            spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
+            self.rfm9x = adafruit_rfm9x.RFM9x(spi, CS, RESET, self.lora_config.get('frequency', 915.0))
+            self.rfm9x.tx_power = self.lora_config.get('tx_power', 23)
+            # Set addressing
+            self.rfm9x.node = self.lora_config.get('local_address', 1)
+            self.rfm9x.destination = self.lora_config.get('remote_address', 2)
+            print(f"[{self.name}] RFM9x LoRa radio initialized. Freq: {self.rfm9x.frequency_mhz}, Power: {self.rfm9x.tx_power}")
+        except (ValueError, RuntimeError) as e:
+            print(f"[{self.name}] ERROR: RFM9x radio not found or failed to initialize: {e}")
+            self.rfm9x = None
 
     def update_interval(self):
         self.interval = self.config.get('timing', {}).get('transmission_interval_seconds', 60)
@@ -105,6 +132,7 @@ class LoRaHandler(BaseHandler):
         while not self._stop_event.is_set(): time.sleep(1)
 
     def send_loop(self):
+        if not self.rfm9x: return
         print(f"[{self.name}] Starting send loop.")
         last_time_sync = 0
         while not self._stop_event.wait(self.interval):
@@ -121,37 +149,42 @@ class LoRaHandler(BaseHandler):
     def send_data_payload(self):
         records = self.db.get_unsent_lora_data(self.config['station_info']['station_id'], self.last_data_sent_id)
         if not records: return
-        payload = {'type': 'data', 'payload': [dict(r) for r in records]}
+        packet = {'type': 'data', 'payload': [dict(r) for r in records]}
         print(f"[{self.name}] Sending {len(records)} data records.")
-        # self.lora.send_to(...)
+        with self.lora_lock:
+            self.rfm9x.send(json.dumps(packet).encode("utf-8"))
         self.last_data_sent_id = records[-1]['id']
 
     def send_time_sync_payload(self):
-        payload = {'type': 'time_sync', 'payload': datetime.datetime.now(datetime.timezone.utc).isoformat()}
+        packet = {'type': 'time_sync', 'payload': datetime.datetime.now(datetime.timezone.utc).isoformat()}
         print(f"[{self.name}] Sending time sync packet.")
-        # self.lora.send_to(...)
+        with self.lora_lock:
+            self.rfm9x.send(json.dumps(packet).encode("utf-8"))
 
     def send_config_payload(self):
         config_payload = self.config.get('remote_config_payload')
         if not config_payload: return
-        payload = {'type': 'config_update', 'payload': config_payload}
-        # Send config less frequently
+        packet = {'type': 'config_update', 'payload': config_payload}
         if time.time() - self.last_config_sent_time > 300:
             print(f"[{self.name}] Sending remote config update.")
-            # self.lora.send_to(...)
+            with self.lora_lock:
+                self.rfm9x.send(json.dumps(packet).encode("utf-8"))
             self.last_config_sent_time = time.time()
 
     def receive_loop(self):
+        if not self.rfm9x: return
         print(f"[{self.name}] Starting receive loop.")
         while not self._stop_event.is_set():
             if not self.config.get('services', {}).get('lora_enabled', False): time.sleep(5); continue
             
-            # has_message, payload, rssi, snr = self.lora.receive()
-            has_message, packet_str, rssi = False, None, 0
-            if not has_message: time.sleep(2); continue
+            with self.lora_lock:
+                packet = self.rfm9x.receive(timeout=5.0)
             
+            if not packet: continue
+
+            rssi = self.rfm9x.last_rssi
             try:
-                data = json.loads(packet_str.decode())
+                data = json.loads(packet.decode())
                 packet_type = data.get('type')
                 payload = data.get('payload')
 
@@ -173,7 +206,6 @@ class LoRaHandler(BaseHandler):
     def handle_time_sync_packet(self, payload):
         print(f"[{self.name}] Received time sync packet: {payload}. Updating system time.")
         try:
-            # This requires sudo privileges. The user must configure passwordless sudo for this command.
             os.system(f"sudo date -s '{payload}'")
         except Exception as e:
             print(f"[{self.name}] ERROR setting system time. Ensure passwordless sudo is configured. {e}")
@@ -184,13 +216,11 @@ class LoRaHandler(BaseHandler):
             with open('config.json', 'r+') as f:
                 local_config = json.load(f)
                 
-                # Safely merge sensor polling rates
                 if 'sensors' in payload:
                     for sensor_id, remote_sensor_conf in payload['sensors'].items():
                         if sensor_id in local_config['sensors']:
                             local_config['sensors'][sensor_id]['polling_rate'] = remote_sensor_conf.get('polling_rate', local_config['sensors'][sensor_id]['polling_rate'])
                 
-                # Move pointer to the beginning to overwrite the file
                 f.seek(0)
                 json.dump(local_config, f, indent=2)
                 f.truncate()

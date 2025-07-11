@@ -74,10 +74,10 @@ def settings():
             current_config['timing']['adafruit_io_interval_seconds'] = request.form.get('adafruit_io_interval_seconds', 300, type=int)
             current_config['lora']['role'] = request.form.get('lora_role', 'base')
             current_config['lora']['frequency'] = request.form.get('lora_frequency', 915.0, type=float)
+            current_config['lora']['tx_power'] = request.form.get('lora_tx_power', 23, type=int)
             current_config['lora']['local_address'] = request.form.get('lora_local_address', 1, type=int)
             current_config['lora']['remote_address'] = request.form.get('lora_remote_address', 2, type=int)
 
-            # --- NEW: Update remote config payload from its own section ---
             if 'remote_config_payload' in current_config:
                 for sensor_id, sensor_config in current_config['remote_config_payload'].get('sensors', {}).items():
                     field_name = f"remote_polling_rate_{sensor_id}"

@@ -19,6 +19,7 @@
     "role": "base",
     "device": "/dev/ttyS0",
     "frequency": 915.0,
+    "tx_power": 23,
     "remote_address": 2,
     "local_address": 1
   },
