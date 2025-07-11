@@ -1,4 +1,4 @@
-# SSOL-Weather-Sensors
+# Weather-Sensors
 
 ## Overview
 
