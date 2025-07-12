@@ -8,12 +8,12 @@
     "lora_enabled": true
   },
   "timing": {
-    "transmission_interval_seconds": 10,
+    "transmission_interval_seconds": 60,
     "adafruit_io_interval_seconds": 300,
     "lora_time_sync_interval_seconds": 3600
   },
   "database": {
-    "path": "/media/username/WSS2/weather_data.db"
+    "drive_label": "WSS"
   },
   "lora": {
     "role": "remote",
@@ -22,32 +22,6 @@
     "tx_power": 23,
     "remote_address": 2,
     "local_address": 1
-  },
-  "remote_config_payload": {
-    "comment": "Settings in this section will be sent to the remote node.",
-    "sensors": {
-      "1": {
-        "polling_rate": 10
-      },
-      "2": {
-        "polling_rate": 60010
-      },
-      "3": {
-        "polling_rate": 10
-      },
-      "4": {
-        "polling_rate": 30010
-      },
-      "5": {
-        "polling_rate": 9
-      },
-      "6": {
-        "polling_rate": 12
-      },
-      "7": {
-        "polling_rate": 12
-      }
-    }
   },
   "sensors": {
     "1": {

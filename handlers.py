@@ -144,7 +144,6 @@ class LoRaHandler(BaseHandler):
                 if time.time() - last_time_sync > self.time_sync_interval:
                     self.send_time_sync_payload()
                     last_time_sync = time.time()
-                self.send_config_payload()
 
     def send_data_payload(self):
         records = self.db.get_unsent_lora_data(self.config['station_info']['station_id'], self.last_data_sent_id)
@@ -161,17 +160,6 @@ class LoRaHandler(BaseHandler):
         print(f"[{self.name}] Sending time sync packet.")
         with self.lora_lock:
             self.rfm9x.send(json.dumps(packet).encode("utf-8"))
-
-    def send_config_payload(self):
-        config_payload = self.config.get('remote_config_payload')
-        if not config_payload: return
-        packet = {'type': 'config_update', 'payload': config_payload}
-        if time.time() - self.last_config_sent_time > 300:
-            print(f"[{self.name}] Sending remote config update.")
-            with self.lora_lock:
-                print(len(json.dumps(packet).encode("utf-8")))
-                self.rfm9x.send(json.dumps(packet).encode("utf-8"))
-            self.last_config_sent_time = time.time()
 
     def receive_loop(self):
         if not self.rfm9x: return
@@ -194,8 +182,6 @@ class LoRaHandler(BaseHandler):
                     self.handle_data_packet(payload, rssi)
                 elif self.role == 'remote' and packet_type == 'time_sync':
                     self.handle_time_sync_packet(payload)
-                elif self.role == 'remote' and packet_type == 'config_update':
-                    self.handle_config_update_packet(payload)
 
             except (json.JSONDecodeError, AttributeError): print(f"[{self.name}] ERROR: Malformed LoRa packet received.")
             except Exception as e: print(f"[{self.name}] ERROR in receive_loop: {e}")
@@ -211,21 +197,3 @@ class LoRaHandler(BaseHandler):
             os.system(f"sudo date -s '{payload}'")
         except Exception as e:
             print(f"[{self.name}] ERROR setting system time. Ensure passwordless sudo is configured. {e}")
-
-    def handle_config_update_packet(self, payload):
-        print(f"[{self.name}] Received remote config update. Applying safely.")
-        try:
-            with open('config.json', 'r+') as f:
-                local_config = json.load(f)
-                
-                if 'sensors' in payload:
-                    for sensor_id, remote_sensor_conf in payload['sensors'].items():
-                        if sensor_id in local_config['sensors']:
-                            local_config['sensors'][sensor_id]['polling_rate'] = remote_sensor_conf.get('polling_rate', local_config['sensors'][sensor_id]['polling_rate'])
-                
-                f.seek(0)
-                json.dump(local_config, f, indent=2)
-                f.truncate()
-            print(f"[{self.name}] Remote config applied. Services will reload.")
-        except Exception as e:
-            print(f"[{self.name}] ERROR applying remote config: {e}")

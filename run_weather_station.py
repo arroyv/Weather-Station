@@ -15,6 +15,34 @@ def load_config(path='config.json'):
     with open(path, 'r') as f:
         return json.load(f)
 
+def get_dynamic_db_path(config):
+    """Constructs the database path dynamically."""
+    try:
+        username = os.getlogin()
+        db_config = config.get('database', {})
+        drive_label = db_config.get('drive_label')
+        
+        # Get station name and create the DB filename from it
+        station_name = config.get('station_info', {}).get('station_name', 'default-station')
+        db_filename = f"{station_name}.db"
+        
+        if not drive_label:
+            raise ValueError("Database 'drive_label' not specified in config.")
+            
+        path = os.path.join('/media', username, drive_label, db_filename)
+        
+        # Check if the mount point exists
+        if not os.path.exists(os.path.dirname(path)):
+            print(f"[Warning] Database directory not found: {os.path.dirname(path)}")
+            print("          Please ensure the USB drive is connected and has the correct label.")
+            
+        return path
+    except Exception as e:
+        print(f"[Error] Could not determine database path: {e}")
+        # Fallback to a local file to prevent crashing
+        station_name = config.get('station_info', {}).get('station_name', 'default-station')
+        return f"{station_name}.db"
+
 def config_watcher_loop(config_path, weather_station, services, stop_event):
     """
     A central loop that watches for changes in the config file and tells
@@ -36,10 +64,9 @@ def config_watcher_loop(config_path, weather_station, services, stop_event):
                     
                     new_config = load_config(config_path)
                     
-                    # Update the weather station itself
+                    # Note: Does not update the database path on the fly. Requires restart.
                     weather_station.update_config(new_config)
                     
-                    # Update all other services
                     for service in services:
                         if hasattr(service, 'update_config'):
                             service.update_config(new_config)
@@ -52,7 +79,7 @@ if __name__ == "__main__":
     config = load_config()
     
     station_id = config.get('station_info', {}).get('station_id', 0)
-    db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), config.get('database', {}).get('path', 'weather_data.db'))
+    db_path = get_dynamic_db_path(config)
 
     print("\n--- Initializing Weather Station Platform ---")
     print(f"  Station ID: {station_id}")

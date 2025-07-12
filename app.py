@@ -8,14 +8,10 @@ from database import DatabaseManager
 # --- Configuration ---
 project_dir = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(project_dir, 'config.json')
-DB_PATH = "/media/username/WSS2/weather_data.db"
 
 app = Flask(__name__)
 app.secret_key = 'super-secret-key-for-weather-station' 
 config_lock = Lock()
-
-# --- Initialize Database Manager ---
-db_manager = DatabaseManager(DB_PATH)
 
 def load_config():
     with config_lock:
@@ -26,6 +22,36 @@ def save_config(new_config):
     with config_lock:
         with open(CONFIG_PATH, 'w') as f:
             json.dump(new_config, f, indent=2)
+
+def get_dynamic_db_path(config):
+    """Constructs the database path dynamically."""
+    try:
+        username = os.getlogin()
+        db_config = config.get('database', {})
+        drive_label = db_config.get('drive_label')
+
+        # Get station name and create the DB filename from it
+        station_name = config.get('station_info', {}).get('station_name', 'default-station')
+        db_filename = f"{station_name}.db"
+        
+        if not drive_label:
+            raise ValueError("Database 'drive_label' not specified in config.")
+            
+        path = os.path.join('/media', username, drive_label, db_filename)
+        
+        if not os.path.exists(os.path.dirname(path)):
+            print(f"[Warning] Dashboard: Database directory not found: {os.path.dirname(path)}")
+            
+        return path
+    except Exception as e:
+        print(f"[Error] Dashboard: Could not determine database path: {e}")
+        station_name = config.get('station_info', {}).get('station_name', 'default-station')
+        return f"{station_name}.db"
+
+# --- Initialize Database Manager ---
+config = load_config()
+db_path = get_dynamic_db_path(config)
+db_manager = DatabaseManager(db_path)
 
 def get_enriched_data():
     config = load_config()
@@ -77,13 +103,6 @@ def settings():
             current_config['lora']['tx_power'] = request.form.get('lora_tx_power', 23, type=int)
             current_config['lora']['local_address'] = request.form.get('lora_local_address', 1, type=int)
             current_config['lora']['remote_address'] = request.form.get('lora_remote_address', 2, type=int)
-
-            if 'remote_config_payload' in current_config:
-                for sensor_id, sensor_config in current_config['remote_config_payload'].get('sensors', {}).items():
-                    field_name = f"remote_polling_rate_{sensor_id}"
-                    new_rate = request.form.get(field_name, type=int)
-                    if new_rate is not None:
-                        current_config['remote_config_payload']['sensors'][sensor_id]['polling_rate'] = new_rate
 
             for sensor_id, sensor_config in current_config.get('sensors', {}).items():
                 current_config['sensors'][sensor_id]['enabled'] = f"enabled_{sensor_config['name']}" in request.form
