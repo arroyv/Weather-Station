@@ -3,6 +3,7 @@ import time
 import json
 import os
 import datetime
+import msgpack # Import MessagePack
 from threading import Thread, Event, Lock
 from Adafruit_IO import Client
 
@@ -46,6 +47,7 @@ class BaseHandler(Thread):
         raise NotImplementedError
 
 class AdafruitIOHandler(BaseHandler):
+    # ... (This class remains unchanged)
     def __init__(self, config, db_manager, aio_client, aio_prefix):
         self.aio_client = aio_client
         self.aio_prefix = aio_prefix
@@ -75,7 +77,6 @@ class AdafruitIOHandler(BaseHandler):
         while not self._stop_event.wait(self.interval):
             if not self.config.get('services', {}).get('adafruit_io_enabled', False): continue
             print(f"[{self.name}] Checking for new data to upload...")
-            # Note: This sends data from ALL stations received by a base station
             latest_readings_by_station = self.db.get_latest_readings_by_station()
             for station_id, readings in latest_readings_by_station.items():
                 for key, data in readings.items():
@@ -83,7 +84,6 @@ class AdafruitIOHandler(BaseHandler):
                         try:
                             feed_key = self._get_feed_key(data['sensor'], data['metric'])
                             if not feed_key: continue
-                            # Add station ID to feed key for uniqueness
                             full_feed_id = f"{self.aio_prefix}.station-{station_id}.{feed_key}"
                             print(f"[{self.name}] Sending {data['value']:.2f} to {full_feed_id}")
                             self.aio_client.send_data(full_feed_id, data['value'])
@@ -91,12 +91,12 @@ class AdafruitIOHandler(BaseHandler):
                         except Exception as e:
                             print(f"[{self.name}] ERROR sending data for {key}: {e}")
 
+
 class LoRaHandler(BaseHandler):
     def __init__(self, config, db_manager):
         self.last_data_sent_id = 0
         self.rfm9x = None
         self.lora_lock = Lock()
-        # This will hold connections to remote DBs
         self.db_connections = {'local': db_manager}
         super().__init__(config, db_manager)
         
@@ -119,19 +119,16 @@ class LoRaHandler(BaseHandler):
             spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
             self.rfm9x = adafruit_rfm9x.RFM9x(spi, CS, RESET, self.lora_config.get('frequency', 915.0))
             self.rfm9x.tx_power = self.lora_config.get('tx_power', 23)
-            # Addressing is removed for broadcast mode
             print(f"[{self.name}] RFM9x LoRa radio initialized in BROADCAST mode.")
         except (ValueError, RuntimeError) as e:
             print(f"[{self.name}] ERROR: RFM9x radio not found or failed to initialize: {e}")
             self.rfm9x = None
 
     def get_remote_db(self, station_name):
-        """Gets or creates a DatabaseManager for a remote station."""
         if station_name in self.db_connections:
             return self.db_connections[station_name]
         
         print(f"[{self.name}] Creating new database connection for remote station: {station_name}")
-        # Construct the path based on the main DB's directory
         main_db_path = self.db_connections['local'].db_path
         base_dir = os.path.dirname(main_db_path)
         remote_db_path = os.path.join(base_dir, f"{station_name}.db")
@@ -141,10 +138,9 @@ class LoRaHandler(BaseHandler):
         return db_manager
 
     def close(self):
-        """Close all database connections."""
         print(f"[{self.name}] Closing all database connections.")
         for name, db_conn in self.db_connections.items():
-            if name != 'local': # The main one is closed by the main script
+            if name != 'local':
                 db_conn.close()
 
     def update_interval(self):
@@ -154,7 +150,6 @@ class LoRaHandler(BaseHandler):
         self.role = self.lora_config.get('role')
 
     def loop(self):
-        """Main loop is now just waiting, as tasks are in threads."""
         while not self._stop_event.is_set():
             time.sleep(1)
 
@@ -168,7 +163,6 @@ class LoRaHandler(BaseHandler):
                 self.send_data_payload()
 
     def send_data_payload(self):
-        # Use the local DB for sending this station's own data
         records = self.db.get_unsent_lora_data(self.config['station_info']['station_id'], self.last_data_sent_id)
         if not records: return
         
@@ -181,7 +175,9 @@ class LoRaHandler(BaseHandler):
 
         print(f"[{self.name}] Broadcasting {len(records)} data records.")
         with self.lora_lock:
-            self.rfm9x.send(json.dumps(packet).encode("utf-8"))
+            # Use msgpack for a more compact binary payload
+            packed_data = msgpack.packb(packet)
+            self.rfm9x.send(packed_data)
         self.last_data_sent_id = records[-1]['id']
 
     def receive_loop(self):
@@ -199,14 +195,14 @@ class LoRaHandler(BaseHandler):
 
             rssi = self.rfm9x.last_rssi
             try:
-                data = json.loads(packet.decode())
+                # Use msgpack to deserialize the binary data
+                data = msgpack.unpackb(packet)
                 packet_type = data.get('type')
                 
-                # We only care about data packets in the base station role
                 if self.role == 'base' and packet_type == 'data':
                     self.handle_data_packet(data, rssi)
 
-            except (json.JSONDecodeError, AttributeError):
+            except (msgpack.exceptions.UnpackException, AttributeError):
                 print(f"[{self.name}] ERROR: Malformed LoRa packet received.")
             except Exception as e:
                 print(f"[{self.name}] ERROR in receive_loop: {e}")
@@ -222,11 +218,9 @@ class LoRaHandler(BaseHandler):
 
         print(f"[{self.name}] Received {len(payload)} data records from '{station_name}' (ID: {station_id}) with RSSI: {rssi}")
         
-        # Get the specific database for this remote station
         remote_db = self.get_remote_db(station_name)
         
         for record in payload:
-            # Write to the specific remote DB file
             remote_db.write_reading(
                 station_id=record['station_id'],
                 sensor=record['sensor'],
