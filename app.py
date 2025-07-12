@@ -105,22 +105,33 @@ def get_history(station_id, sensor_key, hours):
         return jsonify({"error": "Station database not found"}), 404
 
     try:
-        # Correctly split the sensor key into sensor and metric parts
-        # This handles cases like 'wind-speed-ms' by splitting from the right
-        parts = sensor_key.rsplit('-', 1)
-        if len(parts) == 2:
-            sensor, metric = parts
-        else:
-            # Fallback for keys without a hyphen
-            sensor = sensor_key
-            metric = ""
-            
+        # Load the config to get a list of valid sensor names
+        config = load_config()
+        known_sensor_names = [s['name'] for s in config.get('sensors', {}).values()]
+        if 'rain_gauge' in config:
+            known_sensor_names.append(config['rain_gauge']['name'])
+
+        sensor = None
+        metric = None
+
+        # Sort by length (descending) to match longer names first (e.g., 'wind-speed' before 'wind')
+        for s_name in sorted(known_sensor_names, key=len, reverse=True):
+            # Check if the key starts with the sensor name followed by a hyphen
+            if sensor_key.startswith(s_name + '-'):
+                sensor = s_name
+                # The metric is the rest of the string after the sensor name and hyphen
+                metric = sensor_key[len(s_name) + 1:]
+                break
+        
+        if not sensor:
+            raise ValueError(f"Could not determine sensor from key: '{sensor_key}'")
+
         db = DatabaseManager(db_path)
         historical_data = db.get_historical_data(station_id, sensor, metric, hours)
         db.close()
         return jsonify(historical_data)
-    except ValueError:
-         return jsonify({"error": "Invalid sensor key format. Expected 'sensor-metric'."}), 400
+    except ValueError as e:
+         return jsonify({"error": f"Invalid sensor key format. {e}"}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
