@@ -2,7 +2,7 @@
 import time
 import os
 import datetime
-import msgpack
+import json
 from threading import Thread, Event, Lock
 
 import board
@@ -14,8 +14,7 @@ from database import DatabaseManager
 
 class BaseHandler(Thread):
     def __init__(self, config, db_manager):
-        # This direct call to Thread.__init__ with keyword arguments is the correct pattern
-        # and fixes the AssertionError.
+        # This direct call to Thread.__init__ with a keyword argument is the correct pattern.
         super().__init__(daemon=True)
         self.db = db_manager
         self._stop_event = Event()
@@ -40,7 +39,6 @@ class BaseHandler(Thread):
         print(f"[{self.name}] Configuration updated for {self.name}.")
 
     def update_interval(self):
-        # This should be implemented by subclasses
         pass
 
     def loop(self):
@@ -57,7 +55,7 @@ class AdafruitIOHandler(BaseHandler):
         self.interval = self.config.get('timing', {}).get('adafruit_io_interval_seconds', 300)
 
     def loop(self):
-        # ... Adafruit IO loop logic ...
+        # This method is not fully implemented in the provided code, but the structure is here.
         pass
 
 class LoRaHandler(BaseHandler):
@@ -66,7 +64,6 @@ class LoRaHandler(BaseHandler):
         self.rfm9x = None
         self.lora_lock = Lock()
         self.db_connections = {'local': db_manager}
-        # This call now correctly inherits from the fixed BaseHandler
         super().__init__(config, db_manager)
         
         self.init_lora_hardware()
@@ -138,56 +135,72 @@ class LoRaHandler(BaseHandler):
         records = self.db.get_unsent_lora_data(self.config['station_info']['station_id'], self.last_data_sent_id)
         if not records: return
 
-        payload_records = [dict(r) for r in records]
-
-        packet = {
-            'type': 'data',
-            'station_name': self.config.get('station_info', {}).get('station_name'),
-            'station_id': self.config.get('station_info', {}).get('station_id'),
-            'payload': payload_records
-        }
-        
+        print(f"[{self.name}] Attempting to send {len(records)} data records.")
         with self.lora_lock:
-            packed_data = msgpack.packb(packet)
-            if len(packed_data) > 252:
-                print(f"ERROR: Packet size ({len(packed_data)}) exceeds LoRa limit.")
-                return
+            for record in records:
+                packet = {
+                    'type': 'data',
+                    'station_name': self.config.get('station_info', {}).get('station_name', 'unknown'),
+                    'station_id': self.config.get('station_info', {}).get('station_id', 0),
+                    'payload': [dict(record)]
+                }
+                message = json.dumps(packet).encode("utf-8")
+                
+                if len(message) > 252:
+                    print(f"ERROR: Packet for record id {record['id']} is too large ({len(message)} bytes). Skipping.")
+                    continue
+                
+                success = False
+                try:
+                    success = self.rfm9x.send_with_ack(message)
+                except Exception as e:
+                    print(f"[{self.name}] ERROR: Failed to send message: {e}")
 
-            print(f"[{self.name}] Sending {len(records)} records with ACK...")
-            success = self.rfm9x.send_with_ack(packed_data)
-            
-            if success:
-                print(f"[{self.name}] ACK received.")
-                self.last_data_sent_id = records[-1]['id']
-            else:
-                print(f"[{self.name}] No ACK received.")
+                if success:
+                    self.last_data_sent_id = record['id']
+                else:
+                    print(f"[{self.name}] No ACK received for record id {record['id']}. Stopping send cycle.")
+                    break
+            print(f"[{self.name}] Sent up to id {self.last_data_sent_id}.")
 
     def receive_loop(self):
-        if not self.rfm9x: return
+        if not self.rfm9x or self.role != 'base': return
+        print(f"[{self.name}] Starting receive loop.")
         while not self._stop_event.is_set():
-            if not (self.config.get('services', {}).get('lora_enabled', False) and self.role == 'base'):
+            if not self.config.get('services', {}).get('lora_enabled', False):
                 time.sleep(5)
                 continue
-            
-            packet = self.rfm9x.receive(timeout=5.0, with_ack=True)
+
+            with self.lora_lock:
+                packet = self.rfm9x.receive(timeout=5.0, with_ack=True)
+
             if not packet: continue
 
             rssi = self.rfm9x.last_rssi
             try:
-                data = msgpack.unpackb(packet, raw=False)
-                if data.get('type') == 'data':
-                    self.handle_data_packet(data, rssi)
+                data = json.loads(packet.decode())
+                packet_type = data.get('type')
+
+                # We only care about data packets in the base station role
+                if self.role == 'base' and packet_type == 'data':
+                    id = self.handle_data_packet(data, rssi)
+                    # if id != -1 and id == self.last_data_received_id + 1:
+                    #     self.last_data_received_id = id
+                    #     self.send(b'ACK')
+
+            except (json.JSONDecodeError, AttributeError):
+                print(f"[{self.name}] ERROR: Malformed LoRa packet received.")
             except Exception as e:
                 print(f"[{self.name}] ERROR in receive_loop: {e}")
 
     def handle_data_packet(self, data, rssi):
-        station_name = data.get('station_name')
+        station_name = data.get('station_name', 'unknown_station')
         station_id = data.get('station_id')
         payload = data.get('payload', [])
-        
+
         if not all([station_name, station_id is not None, payload]):
-            print(f"[{self.name}] Received invalid data packet.")
-            return
+            print(f"[{self.name}] Received data packet with no payload or station_id.")
+            return -1
 
         remote_db = self.get_remote_db(station_name)
         
@@ -200,4 +213,6 @@ class LoRaHandler(BaseHandler):
                 rssi=rssi,
                 timestamp=record['timestamp']
             )
-        print(f"[{self.name}] Wrote {len(payload)} records from '{station_name}'")
+            print(f"[{self.name}] Received id:{record['id']} data record from '{station_name}' (ID: {station_id}) with RSSI: {rssi}")
+        
+        return payload[-1]['id']
