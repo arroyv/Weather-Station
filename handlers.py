@@ -193,15 +193,24 @@ class LoRaHandler(BaseHandler):
         # self.last_data_sent_id = records[-1]['id']
         with self.lora_lock:
             for record in records:
-                message = json.dumps(dict(record)).encode("utf-8")
+                packet = {
+                    'type': 'data',
+                    'station_name': self.config.get('station_info', {}).get('station_name', 'unknown'),
+                    'station_id': self.config.get('station_info', {}).get('station_id', 0),
+                    'payload': [dict(record)]
+                }
+                message = json.dumps(packet).encode("utf-8")
                 try:
-                    success = self.rfm9x.send_with_ack(message, timeout=self.lora_config.get('ack_timeout', 2.0), retries=self.lora_config.get('ack_retries', 3),destination=self.rfm9x.destination)
+                    success = self.rfm9x.send(message)
+                    # Stop for a while then send the next packet
+                    time.sleep(self.lora_config.get('ack_delay', 0.2))
                 except Exception as e:
                     print(f"[{self.name}] ERROR: Failed to send message: {e}")
                 if success:
                     self.last_data_sent_id = record['id']
                 else:
                     break
+            print(f"[{self.name}] Sent to id {self.last_data_sent_id}.")
 
     def receive_loop(self):
         if not self.rfm9x: return
@@ -239,7 +248,7 @@ class LoRaHandler(BaseHandler):
             print(f"[{self.name}] Received data packet with no payload or station_id.")
             return
 
-        print(f"[{self.name}] Received {len(payload)} data records from '{station_name}' (ID: {station_id}) with RSSI: {rssi}")
+        print(f"[{self.name}] Received id:{payload[0]['id']} data record from '{station_name}' (ID: {station_id}) with RSSI: {rssi}")
 
         # Get the specific database for this remote station
         remote_db = self.get_remote_db(station_name)
