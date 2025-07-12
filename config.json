@@ -28,8 +28,8 @@
       "polling_rate": 600,
       "metrics": {
         "moisture-rh": {
-          "register": 0,
-          "decimals": 0,
+          "register": 1,
+          "decimals": 1,
           "correction": {
             "type": "map",
             "raw_min": 310,
@@ -40,7 +40,7 @@
           "unit": "%RH"
         },
         "temp-c": {
-          "register": 1,
+          "register": 0,
           "decimals": 1,
           "signed": true,
           "correction": {
@@ -89,7 +89,7 @@
       "enabled": true,
       "metrics": {
         "ppm": {
-          "register": 0,
+          "register": 2,
           "decimals": 0,
           "correction": {},
           "feed_key": "co2-ppm",
@@ -100,16 +100,14 @@
     },
     "4": {
       "name": "light",
-      "polling_rate": 30,
+      "polling_rate": 900,
       "enabled": true,
       "metrics": {
         "lux": {
-          "register": 0,
+          "register": 6,
+          "decimals": 0,
           "function": "read_long",
-          "correction": {
-            "type": "linear",
-            "factor": 1.25
-          },
+          "correction": {},
           "feed_key": "light-lux",
           "label": "Light Level",
           "unit": "lux"
@@ -123,7 +121,7 @@
       "metrics": {
         "kpa": {
           "register": 0,
-          "decimals": 3,
+          "decimals": 1,
           "correction": {
             "type": "linear",
             "factor": 0.001
@@ -164,7 +162,7 @@
       "enabled": true,
       "metrics": {
         "speed-ms": {
-          "register": 1,
+          "register": 0,
           "decimals": 1,
           "correction": {},
           "feed_key": "wind-speed-ms",
@@ -178,7 +176,7 @@
     "name": "rain",
     "enabled": false,
     "gpio_pin": 17,
-    "mm_per_tip": 0.2765,
+    "mm_per_tip": 0.5,
     "debounce_ms": 250,
     "metric": "mm",
     "feed_key": "rain-mm",
