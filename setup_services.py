@@ -3,6 +3,7 @@ import os
 import sys
 import subprocess
 import argparse
+import getpass
 
 # --- Configuration ---
 # The absolute path to your project directory
@@ -47,7 +48,7 @@ WantedBy=multi-user.target
 
 def run_command(command, as_root=True):
     """Runs a shell command, optionally with sudo."""
-    if as_root:
+    if as_root and os.geteuid() != 0:
         command.insert(0, 'sudo')
     print(f"  > Running: {' '.join(command)}")
     try:
@@ -64,13 +65,20 @@ def check_root():
     """Checks if the script is being run as root."""
     if os.geteuid() != 0:
         print("[ERROR] This script must be run with sudo.", file=sys.stderr)
-        print("        Please run as: sudo python3 setup_services.py <command>", file=sys.stderr)
+        print("        Please run as: sudo /path/to/your/venv/bin/python3 setup_services.py <command>", file=sys.stderr)
         sys.exit(1)
 
 def do_install():
     """Interactive installer for the services."""
     check_root()
-    print("--- Weather Station Service Installer ---")
+    
+    # Get the username of the user who invoked sudo
+    user = os.getenv('SUDO_USER')
+    if not user:
+        print("[Warning] Could not determine username from SUDO_USER. Falling back to current user.")
+        user = getpass.getuser()
+
+    print(f"--- Weather Station Service Installer (for user: {user}) ---")
     
     # --- Get Station Info ---
     try:
@@ -97,7 +105,7 @@ def do_install():
     # --- Create Weather Station Service ---
     print("\n[1/2] Creating weather-station.service...")
     service_config = {
-        'user': 'pi',
+        'user': user,
         'path': PROJECT_PATH,
         'python_exec': PYTHON_EXEC,
         'name': station_name,
@@ -117,8 +125,16 @@ def do_install():
     # --- Create Dashboard Service (if base station) ---
     if role == 'base':
         print("\n[2/2] Creating weather-dashboard.service...")
+        if not (os.path.isfile(GUNICORN_EXEC) and os.access(GUNICORN_EXEC, os.X_OK)):
+            print(f"\n[ERROR] `gunicorn` was not found at {GUNICORN_EXEC}", file=sys.stderr)
+            print(f"        Please ensure it's installed in your virtual environment: pip install gunicorn", file=sys.stderr)
+            if os.path.exists(service_path):
+                os.remove(service_path)
+                print(f"\nRemoved partially created file: {service_path}")
+            return
+
         dashboard_config = {
-            'user': 'pi',
+            'user': user,
             'path': PROJECT_PATH,
             'gunicorn_exec': GUNICORN_EXEC
         }
@@ -134,7 +150,7 @@ def do_install():
 
     # --- Reload systemd ---
     print("\nReloading systemd daemon...")
-    run_command(['systemctl', 'daemon-reload'], as_root=False) # Already root
+    run_command(['systemctl', 'daemon-reload'], as_root=False)
 
     # --- Ask to enable ---
     try:
