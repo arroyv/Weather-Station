@@ -1,6 +1,6 @@
 {
   "station_info": {
-    "station_name": "greenhouse-base",
+    "station_name": "greenhouse-remote",
     "station_id": 2
   },
   "services": {
@@ -16,7 +16,7 @@
     "drive_label": "WSS"
   },
   "lora": {
-    "role": "base",
+    "role": "remote",
     "device": "/dev/ttyS0",
     "frequency": 915.0,
     "tx_power": 23
