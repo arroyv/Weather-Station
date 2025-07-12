@@ -193,7 +193,7 @@ class LoRaHandler(BaseHandler):
         # self.last_data_sent_id = records[-1]['id']
         with self.lora_lock:
             for record in records:
-                message = json.dumps(record).encode("utf-8")
+                message = json.dumps(dict(record)).encode("utf-8")
                 success = self.rfm9x.send_with_ack(message)
                 if success:
                     self.last_data_sent_id = record['id']
@@ -209,7 +209,7 @@ class LoRaHandler(BaseHandler):
                 continue
 
             with self.lora_lock:
-                packet = self.rfm9x.receive(timeout=5.0, with_ack=True)
+                packet = self.rfm9x.receive(timeout=3.0, with_ack=True)
 
             if not packet: continue
 

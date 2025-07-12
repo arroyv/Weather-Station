@@ -8,7 +8,7 @@
     "lora_enabled": true
   },
   "timing": {
-    "transmission_interval_seconds": 1,
+    "transmission_interval_seconds": 3,
     "adafruit_io_interval_seconds": 300,
     "lora_time_sync_interval_seconds": 3600
   },
