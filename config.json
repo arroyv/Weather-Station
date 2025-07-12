@@ -1,7 +1,7 @@
 {
   "station_info": {
     "station_name": "greenhouse-base",
-    "station_id": 2
+    "station_id": 1
   },
   "services": {
     "adafruit_io_enabled": false,
@@ -25,7 +25,7 @@
     "1": {
       "name": "soil",
       "enabled": true,
-      "polling_rate": 10,
+      "polling_rate": 600,
       "metrics": {
         "moisture-rh": {
           "register": 0,
@@ -56,7 +56,7 @@
     "2": {
       "name": "atmosphere",
       "enabled": true,
-      "polling_rate": 10,
+      "polling_rate": 120,
       "metrics": {
         "humidity-rh": {
           "register": 0,
@@ -85,7 +85,7 @@
     },
     "3": {
       "name": "co2",
-      "polling_rate": 10,
+      "polling_rate": 60,
       "enabled": true,
       "metrics": {
         "ppm": {
