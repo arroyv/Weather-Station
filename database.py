@@ -86,7 +86,7 @@ class DatabaseManager:
                 """
                 cursor.execute(query)
                 rows = cursor.fetchall()
-                
+
                 data_by_station = {}
                 for row in rows:
                     station_id = row['station_id']
@@ -105,8 +105,8 @@ class DatabaseManager:
             try:
                 cursor = self.conn.cursor()
                 query = """
-                    SELECT timestamp, sensor, metric, value FROM readings 
-                    WHERE station_id = ? AND timestamp >= datetime('now', '-' || ? || ' hours') 
+                    SELECT timestamp, sensor, metric, value FROM readings
+                    WHERE station_id = ? AND timestamp >= datetime('now', '-' || ? || ' hours')
                     ORDER BY timestamp ASC
                 """
                 cursor.execute(query, (station_id, hours))
@@ -115,7 +115,7 @@ class DatabaseManager:
                 print(f"[Database] ERROR: Could not fetch historical data: {e}")
                 return []
 
-    def get_unsent_lora_data(self, station_id, last_sent_id, limit=1):
+    def get_unsent_lora_data(self, station_id, last_sent_id, limit=20):
         """
         Retrieves a batch of data for this station that has not yet been sent via LoRa.
         """

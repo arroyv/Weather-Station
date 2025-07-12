@@ -99,7 +99,7 @@ class LoRaHandler(BaseHandler):
         # This will hold connections to remote DBs
         self.db_connections = {'local': db_manager}
         super().__init__(config, db_manager)
-        
+
         self.init_lora_hardware()
 
         if self.rfm9x:
@@ -118,9 +118,16 @@ class LoRaHandler(BaseHandler):
             RESET = DigitalInOut(board.D25)
             spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
             self.rfm9x = adafruit_rfm9x.RFM9x(spi, CS, RESET, self.lora_config.get('frequency', 915.0))
+            self.rfm9x.enable_crc = True
+            self.rfm9x.ack_retries = self.lora_config.get('ack_retries', 3)
+            self.rfm9x.ack_timeout = self.lora_config.get('ack_timeout', 0.1)
             self.rfm9x.tx_power = self.lora_config.get('tx_power', 23)
             # Addressing is removed for broadcast mode
-            print(f"[{self.name}] RFM9x LoRa radio initialized in BROADCAST mode.")
+            # print(f"[{self.name}] RFM9x LoRa radio initialized in BROADCAST mode.")
+
+            self.rfm9x.node = 0 if self.role == 'base' else 1
+            self.rfm9x.destination = 1 if self.role == 'base' else 0
+            print(f"[{self.name}] RFM9x LoRa radio initialized. Freq: {self.rfm9x.frequency_mhz}, Power: {self.rfm9x.tx_power}")
         except (ValueError, RuntimeError) as e:
             print(f"[{self.name}] ERROR: RFM9x radio not found or failed to initialize: {e}")
             self.rfm9x = None
@@ -129,13 +136,13 @@ class LoRaHandler(BaseHandler):
         """Gets or creates a DatabaseManager for a remote station."""
         if station_name in self.db_connections:
             return self.db_connections[station_name]
-        
+
         print(f"[{self.name}] Creating new database connection for remote station: {station_name}")
         # Construct the path based on the main DB's directory
         main_db_path = self.db_connections['local'].db_path
         base_dir = os.path.dirname(main_db_path)
         remote_db_path = os.path.join(base_dir, f"{station_name}.db")
-        
+
         db_manager = DatabaseManager(remote_db_path)
         self.db_connections[station_name] = db_manager
         return db_manager
@@ -163,7 +170,7 @@ class LoRaHandler(BaseHandler):
         print(f"[{self.name}] Starting send loop.")
         while not self._stop_event.wait(self.interval):
             if not self.config.get('services', {}).get('lora_enabled', False): continue
-            
+
             if self.role == 'remote':
                 self.send_data_payload()
 
@@ -171,7 +178,7 @@ class LoRaHandler(BaseHandler):
         # Use the local DB for sending this station's own data
         records = self.db.get_unsent_lora_data(self.config['station_info']['station_id'], self.last_data_sent_id)
         if not records: return
-        
+
         packet = {
             'type': 'data',
             'station_name': self.config.get('station_info', {}).get('station_name', 'unknown'),
@@ -180,9 +187,18 @@ class LoRaHandler(BaseHandler):
         }
 
         print(f"[{self.name}] Broadcasting {len(records)} data records.")
+        # with self.lora_lock:
+        #     for record in records:
+        #         self.rfm9x.send(json.dumps(record).encode("utf-8"))
+        # self.last_data_sent_id = records[-1]['id']
         with self.lora_lock:
-            self.rfm9x.send(json.dumps(packet).encode("utf-8"))
-        self.last_data_sent_id = records[-1]['id']
+            for record in records:
+                message = json.dumps(record).encode("utf-8")
+                success = self.rfm9x.send_with_ack(message)
+                if success:
+                    self.last_data_sent_id = record['id']
+                else:
+                    break
 
     def receive_loop(self):
         if not self.rfm9x: return
@@ -191,17 +207,17 @@ class LoRaHandler(BaseHandler):
             if not self.config.get('services', {}).get('lora_enabled', False):
                 time.sleep(5)
                 continue
-            
+
             with self.lora_lock:
-                packet = self.rfm9x.receive(timeout=5.0)
-            
+                packet = self.rfm9x.receive(timeout=5.0, with_ack=True)
+
             if not packet: continue
 
             rssi = self.rfm9x.last_rssi
             try:
                 data = json.loads(packet.decode())
                 packet_type = data.get('type')
-                
+
                 # We only care about data packets in the base station role
                 if self.role == 'base' and packet_type == 'data':
                     self.handle_data_packet(data, rssi)
@@ -215,16 +231,16 @@ class LoRaHandler(BaseHandler):
         station_name = data.get('station_name', 'unknown_station')
         station_id = data.get('station_id')
         payload = data.get('payload', [])
-        
+
         if not payload or not station_id:
             print(f"[{self.name}] Received data packet with no payload or station_id.")
             return
 
         print(f"[{self.name}] Received {len(payload)} data records from '{station_name}' (ID: {station_id}) with RSSI: {rssi}")
-        
+
         # Get the specific database for this remote station
         remote_db = self.get_remote_db(station_name)
-        
+
         for record in payload:
             # Write to the specific remote DB file
             remote_db.write_reading(

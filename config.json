@@ -1,6 +1,6 @@
 {
   "station_info": {
-    "station_name": "greenhouse-base",
+    "station_name": "greenhouse-remote",
     "station_id": 2
   },
   "services": {
@@ -8,7 +8,7 @@
     "lora_enabled": true
   },
   "timing": {
-    "transmission_interval_seconds": 60,
+    "transmission_interval_seconds": 1,
     "adafruit_io_interval_seconds": 300,
     "lora_time_sync_interval_seconds": 3600
   },
@@ -16,10 +16,12 @@
     "drive_label": "WSS"
   },
   "lora": {
-    "role": "base",
+    "role": "remote",
     "device": "/dev/ttyS0",
     "frequency": 915.0,
-    "tx_power": 23
+    "tx_power": 23,
+    "ack_retries": 3,
+    "ack_timeout": 2.0
   },
   "sensors": {
     "1": {
