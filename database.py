@@ -123,7 +123,7 @@ class DatabaseManager:
                 print(f"[Database] ERROR: Could not fetch historical data: {e}")
                 return []
 
-    def get_unsent_lora_data(self, station_id, last_sent_id, limit=3):
+    def get_unsent_lora_data(self, station_id, last_sent_id, limit=1):
         """
         Retrieves a batch of data for this station that has not yet been sent via LoRa.
         """
