@@ -12,18 +12,13 @@
     "adafruit_io_interval_seconds": 300
   },
   "database": {
-    "drive_label": "WSS"
+    "drive_label": "WSS_DB"
   },
   "lora": {
     "role": "base",
-    "device": "/dev/ttyS0",
     "frequency": 915.0,
     "tx_power": 23,
-    "local_address": 1,
-    "remote_address": 2,
-    "ack_retries": 3,
-    "ack_delay": 0.2,
-    "ack_timeout": 2.0
+    "base_station_address": 1
   },
   "sensors": {
     "1": {
@@ -31,8 +26,21 @@
       "enabled": true,
       "polling_rate": 600,
       "metrics": {
-        "moisture-rh": { "register": 1, "decimals": 1, "label": "Soil Moisture", "unit": "%RH" },
-        "temp-c": { "register": 0, "decimals": 1, "signed": true, "label": "Soil Temperature", "unit": "°C" }
+        "moisture-rh": {
+          "register": 1,
+          "decimals": 1,
+          "label": "Soil Moisture",
+          "unit": "%RH",
+          "feed_key": "soil-moisture"
+        },
+        "temp-c": {
+          "register": 0,
+          "decimals": 1,
+          "signed": true,
+          "label": "Soil Temperature",
+          "unit": "°C",
+          "feed_key": "soil-temp"
+        }
       }
     },
     "2": {
@@ -40,49 +48,21 @@
       "enabled": true,
       "polling_rate": 600,
       "metrics": {
-        "humidity-rh": { "register": 0, "decimals": 1, "label": "Humidity", "unit": "%RH" },
-        "temp-c": { "register": 1, "decimals": 1, "signed": true, "label": "Air Temperature", "unit": "°C" }
-      }
-    },
-    "3": {
-      "name": "co2",
-      "polling_rate": 60,
-      "enabled": true,
-      "metrics": {
-        "ppm": { "register": 2, "decimals": 0, "label": "CO2", "unit": "ppm" }
-      }
-    },
-    "4": {
-      "name": "light",
-      "polling_rate": 600,
-      "enabled": true,
-      "metrics": {
-        "lux": { "register": 6, "decimals": 0, "label": "Light Level", "unit": "lux" }
-      }
-    },
-    "5": {
-      "name": "pressure",
-      "polling_rate": 600,
-      "enabled": true,
-      "metrics": {
-        "kpa": { "register": 0, "decimals": 1, "label": "Pressure", "unit": "kPa" },
-        "temp-c": { "register": 1, "decimals": 1, "signed": true, "label": "Baro Temperature", "unit": "°C" }
-      }
-    },
-    "6": {
-      "name": "wind-direction",
-      "polling_rate": 120,
-      "enabled": true,
-      "metrics": {
-        "direction": { "register": 0, "decimals": 0, "label": "Wind Direction", "unit": "°" }
-      }
-    },
-    "7": {
-      "name": "wind-speed",
-      "polling_rate": 120,
-      "enabled": true,
-      "metrics": {
-        "speed-ms": { "register": 0, "decimals": 1, "label": "Wind Speed", "unit": "m/s" }
+        "humidity-rh": {
+          "register": 0,
+          "decimals": 1,
+          "label": "Humidity",
+          "unit": "%RH",
+          "feed_key": "humidity"
+        },
+        "temp-c": {
+          "register": 1,
+          "decimals": 1,
+          "signed": true,
+          "label": "Air Temperature",
+          "unit": "°C",
+          "feed_key": "air-temp"
+        }
       }
     }
   },
@@ -94,6 +74,7 @@
     "debounce_ms": 250,
     "metric": "mm",
     "label": "Rainfall",
-    "unit": "mm"
+    "unit": "mm",
+    "feed_key": "rain"
   }
 }
