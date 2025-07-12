@@ -12,7 +12,7 @@
     "adafruit_io_interval_seconds": 300
   },
   "database": {
-    "drive_label": "WSS_DB"
+    "drive_label": "WSS"
   },
   "lora": {
     "role": "base",
