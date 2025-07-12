@@ -120,7 +120,7 @@ class LoRaHandler(BaseHandler):
             self.rfm9x = adafruit_rfm9x.RFM9x(spi, CS, RESET, self.lora_config.get('frequency', 915.0))
             self.rfm9x.enable_crc = True
             self.rfm9x.ack_retries = self.lora_config.get('ack_retries', 3)
-            self.rfm9x.ack_timeout = self.lora_config.get('ack_timeout', 0.1)
+            self.rfm9x.ack_delay = self.lora_config.get('ack_delay', 0.2)
             self.rfm9x.tx_power = self.lora_config.get('tx_power', 23)
             # Addressing is removed for broadcast mode
             # print(f"[{self.name}] RFM9x LoRa radio initialized in BROADCAST mode.")
@@ -194,7 +194,10 @@ class LoRaHandler(BaseHandler):
         with self.lora_lock:
             for record in records:
                 message = json.dumps(dict(record)).encode("utf-8")
-                success = self.rfm9x.send_with_ack(message)
+                try:
+                    success = self.rfm9x.send_with_ack(message, timeout=self.lora_config.get('ack_timeout', 2.0), retries=self.lora_config.get('ack_retries', 3),destination=self.rfm9x.destination)
+                except Exception as e:
+                    print(f"[{self.name}] ERROR: Failed to send message: {e}")
                 if success:
                     self.last_data_sent_id = record['id']
                 else:
@@ -209,13 +212,13 @@ class LoRaHandler(BaseHandler):
                 continue
 
             with self.lora_lock:
-                packet = self.rfm9x.receive(timeout=3.0, with_ack=True)
+                packet = self.rfm9x.receive(timeout=5.0, with_header=True, with_ack=True)
 
             if not packet: continue
 
             rssi = self.rfm9x.last_rssi
             try:
-                data = json.loads(packet.decode())
+                data = json.loads(packet[4:].decode())
                 packet_type = data.get('type')
 
                 # We only care about data packets in the base station role
