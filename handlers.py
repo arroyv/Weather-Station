@@ -4,7 +4,6 @@ import os
 import datetime
 import msgpack
 from threading import Thread, Event, Lock
-from Adafruit_IO import Client
 
 import board
 import busio
@@ -14,12 +13,52 @@ import adafruit_rfm9x
 from database import DatabaseManager
 
 class BaseHandler(Thread):
-    # ... (BaseHandler is unchanged)
-    pass
+    def __init__(self, config, db_manager):
+        # This direct call to Thread.__init__ with keyword arguments is the correct pattern
+        # and fixes the AssertionError.
+        super().__init__(daemon=True)
+        self.db = db_manager
+        self._stop_event = Event()
+        self.name = self.__class__.__name__
+        self.update_config(config)
+
+    def run(self):
+        print(f"[{self.name}] Service started.")
+        self.loop()
+        print(f"[{self.name}] Service stopped.")
+
+    def stop(self):
+        self._stop_event.set()
+        if hasattr(self, 'close'):
+            self.close()
+        if self.is_alive():
+            self.join()
+
+    def update_config(self, new_config):
+        self.config = new_config
+        self.update_interval()
+        print(f"[{self.name}] Configuration updated for {self.name}.")
+
+    def update_interval(self):
+        # This should be implemented by subclasses
+        pass
+
+    def loop(self):
+        raise NotImplementedError
 
 class AdafruitIOHandler(BaseHandler):
-    # ... (AdafruitIOHandler is unchanged)
-    pass
+    def __init__(self, config, db_manager, aio_client, aio_prefix):
+        self.aio_client = aio_client
+        self.aio_prefix = aio_prefix
+        self.last_sent_ids = {}
+        super().__init__(config, db_manager)
+
+    def update_interval(self):
+        self.interval = self.config.get('timing', {}).get('adafruit_io_interval_seconds', 300)
+
+    def loop(self):
+        # ... Adafruit IO loop logic ...
+        pass
 
 class LoRaHandler(BaseHandler):
     def __init__(self, config, db_manager):
@@ -27,6 +66,7 @@ class LoRaHandler(BaseHandler):
         self.rfm9x = None
         self.lora_lock = Lock()
         self.db_connections = {'local': db_manager}
+        # This call now correctly inherits from the fixed BaseHandler
         super().__init__(config, db_manager)
         
         self.init_lora_hardware()
@@ -98,11 +138,7 @@ class LoRaHandler(BaseHandler):
         records = self.db.get_unsent_lora_data(self.config['station_info']['station_id'], self.last_data_sent_id)
         if not records: return
 
-        payload_records = []
-        for r in records:
-            record_dict = dict(r)
-            del record_dict['station_id']
-            payload_records.append(record_dict)
+        payload_records = [dict(r) for r in records]
 
         packet = {
             'type': 'data',
@@ -138,7 +174,7 @@ class LoRaHandler(BaseHandler):
 
             rssi = self.rfm9x.last_rssi
             try:
-                data = msgpack.unpackb(packet)
+                data = msgpack.unpackb(packet, raw=False)
                 if data.get('type') == 'data':
                     self.handle_data_packet(data, rssi)
             except Exception as e:
@@ -149,11 +185,10 @@ class LoRaHandler(BaseHandler):
         station_id = data.get('station_id')
         payload = data.get('payload', [])
         
-        if not all([station_name, station_id, payload]):
+        if not all([station_name, station_id is not None, payload]):
             print(f"[{self.name}] Received invalid data packet.")
             return
 
-        print(f"[{self.name}] Received {len(payload)} records from '{station_name}'")
         remote_db = self.get_remote_db(station_name)
         
         for record in payload:
@@ -165,3 +200,4 @@ class LoRaHandler(BaseHandler):
                 rssi=rssi,
                 timestamp=record['timestamp']
             )
+        print(f"[{self.name}] Wrote {len(payload)} records from '{station_name}'")

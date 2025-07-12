@@ -66,21 +66,29 @@ def get_enriched_data():
                 sensor_name = reading['sensor']
                 metric_name = reading['metric']
                 
+                reading_dict = dict(reading)
+                
                 if sensor_name == 'wind-direction' and metric_name == 'direction':
-                    reading['display_value'] = direction_map.get(int(reading['value']), 'Unknown')
+                    reading_dict['display_value'] = direction_map.get(int(reading['value']), 'Unknown')
                 
                 # Look up label and unit from config
+                label, unit = key, ""
                 for s_conf in config.get('sensors', {}).values():
                     if s_conf['name'] == sensor_name:
                         metric_conf = s_conf.get('metrics', {}).get(metric_name)
                         if metric_conf:
-                            reading['label'] = metric_conf.get('label', key)
-                            reading['unit'] = metric_conf.get('unit', '')
+                            label = metric_conf.get('label', key)
+                            unit = metric_conf.get('unit', '')
                         break
                 rg_conf = config.get('rain_gauge', {})
                 if rg_conf.get('name') == sensor_name:
-                     reading['label'] = rg_conf.get('label', key)
-                     reading['unit'] = rg_conf.get('unit', '')
+                     label = rg_conf.get('label', key)
+                     unit = rg_conf.get('unit', '')
+                
+                reading_dict['label'] = label
+                reading_dict['unit'] = unit
+                latest_data_by_station[station_id][key] = reading_dict
+
 
         cache['data'] = latest_data_by_station
         cache['last_updated'] = now
@@ -96,7 +104,6 @@ def get_history(station_id, sensor_key, hours):
 
     try:
         db = DatabaseManager(db_path)
-        # The key is now the metric_column for the query
         historical_data = db.get_historical_data(station_id, hours, sensor_key)
         db.close()
         return jsonify(historical_data)
