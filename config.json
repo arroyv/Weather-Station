@@ -24,7 +24,7 @@
     "1": {
       "name": "soil",
       "enabled": true,
-      "polling_rate": 60,
+      "polling_rate": 900,
       "metrics": {
         "moisture-rh": { "register": 1, "decimals": 1, "label": "Soil Moisture", "unit": "%RH" },
         "temp-c": { "register": 0, "decimals": 1, "signed": true, "label": "Soil Temperature", "unit": "°C" }
@@ -33,7 +33,7 @@
     "2": {
       "name": "atmosphere",
       "enabled": true,
-      "polling_rate": 60,
+      "polling_rate": 600,
       "metrics": {
         "humidity-rh": { "register": 0, "decimals": 1, "label": "Humidity", "unit": "%RH" },
         "temp-c": { "register": 1, "decimals": 1, "signed": true, "label": "Air Temperature", "unit": "°C" }
@@ -49,7 +49,7 @@
     },
     "4": {
       "name": "light",
-      "polling_rate": 60,
+      "polling_rate": 600,
       "enabled": true,
       "metrics": {
         "lux": { "register": 6, "decimals": 0, "label": "Light Level", "unit": "lux" }
@@ -57,7 +57,7 @@
     },
     "5": {
       "name": "pressure",
-      "polling_rate": 60,
+      "polling_rate": 600,
       "enabled": true,
       "metrics": {
         "kpa": { "register": 0, "decimals": 1, "label": "Pressure", "unit": "kPa" },
@@ -66,7 +66,7 @@
     },
     "6": {
       "name": "wind-direction",
-      "polling_rate": 12,
+      "polling_rate": 120,
       "enabled": true,
       "metrics": {
         "direction": { "register": 0, "decimals": 0, "label": "Wind Direction", "unit": "°" }
@@ -74,7 +74,7 @@
     },
     "7": {
       "name": "wind-speed",
-      "polling_rate": 12,
+      "polling_rate": 120,
       "enabled": true,
       "metrics": {
         "speed-ms": { "register": 0, "decimals": 1, "label": "Wind Speed", "unit": "m/s" }
