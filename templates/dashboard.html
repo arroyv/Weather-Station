@@ -11,7 +11,7 @@
         .metric-value { font-size: 2rem; font-weight: bold; }
         .metric-label { font-size: 1rem; color: #6c757d; }
         .graph-container {
-            display: none; /* Hidden by default */
+            display: none;
             margin-top: 1rem;
             padding: 1rem;
             background-color: #ffffff;
@@ -45,8 +45,13 @@
                     <div class="col">
                         <div class="card h-100 shadow-sm metric-card">
                             <div class="card-body">
-                                <div class="metric-value">{{ '%.2f'|format(reading.value) }}</div>
-                                <div class="metric-label">{{ reading.label }} ({{ reading.unit }})</div>
+                                {% if reading.display_value %}
+                                    <div class="metric-value">{{ reading.display_value }}</div>
+                                    <div class="metric-label">{{ reading.label }}</div>
+                                {% else %}
+                                     <div class="metric-value">{{ '%.2f'|format(reading.value) }}</div>
+                                     <div class="metric-label">{{ reading.label }} ({{ reading.unit }})</div>
+                                {% endif %}
                                 <div class="mt-3">
                                     <div class="btn-group btn-group-sm" role="group">
                                         <button type="button" class="btn btn-outline-primary time-range-btn" data-hours="24" data-station-id="{{ station.id }}" data-sensor-key="{{ key }}">24h</button>
@@ -75,7 +80,6 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            // --- Tab Persistence Logic ---
             const stationTab = document.getElementById('stationTab');
             const tabButtons = stationTab.querySelectorAll('.nav-link');
             const tabContentPanes = document.querySelectorAll('.tab-pane');
@@ -97,15 +101,13 @@
             const lastTabId = localStorage.getItem(lastTabKey);
             activateTab(document.getElementById(lastTabId) || tabButtons[0]);
 
-            // --- Charting Logic ---
-            const charts = {}; // To store chart instances
+            const charts = {};
 
             document.querySelectorAll('.time-range-btn').forEach(button => {
                 button.addEventListener('click', async (event) => {
                     const { stationId, sensorKey, hours } = event.target.dataset;
                     const container = document.getElementById(`graph-container-${stationId}-${sensorKey}`);
                     
-                    // Show spinner or loading text
                     container.style.display = 'block';
                     container.innerHTML = '<div class="text-center">Loading...</div>';
 
@@ -114,16 +116,13 @@
                         if (!response.ok) throw new Error(`Network response was not ok: ${response.statusText}`);
                         const data = await response.json();
                         
-                        // Clear loading text and re-add canvas
                         container.innerHTML = `<canvas id="chart-${stationId}-${sensorKey}"></canvas>`;
                         const ctx = document.getElementById(`chart-${stationId}-${sensorKey}`).getContext('2d');
 
-                        if (charts[sensorKey]) {
-                            charts[sensorKey].destroy(); // Destroy old chart instance
-                        }
+                        if (charts[sensorKey]) charts[sensorKey].destroy();
 
                         if (data.length === 0) {
-                            container.innerHTML = '<div class="text-center text-muted">No historical data available.</div>';
+                            container.innerHTML = '<div class="text-center text-muted">No historical data.</div>';
                             return;
                         }
 
@@ -131,7 +130,6 @@
                             type: 'line',
                             data: {
                                 datasets: [{
-                                    label: sensorKey,
                                     data: data.map(d => ({ x: new Date(d.timestamp), y: d.value })),
                                     borderColor: 'rgba(0, 123, 255, 1)',
                                     borderWidth: 2,
@@ -141,21 +139,9 @@
                             },
                             options: {
                                 scales: {
-                                    x: {
-                                        type: 'time',
-                                        time: {
-                                            unit: 'day',
-                                            tooltipFormat: 'MMM d, yyyy h:mm a'
-                                        },
-                                        title: { display: false }
-                                    },
-                                    y: {
-                                        title: { display: false }
-                                    }
+                                    x: { type: 'time', time: { unit: 'day' } },
                                 },
-                                plugins: {
-                                    legend: { display: false }
-                                }
+                                plugins: { legend: { display: false } }
                             }
                         });
                     } catch (error) {
