@@ -82,24 +82,30 @@ def config_watcher_loop(config_path, weather_station, services, stop_event):
             print(f"[ConfigWatcher] ERROR: {e}")
 
 if __name__ == "__main__":
-    # --- 1. Set up Command-Line Argument Parsing ---
+    # --- Set up Command-Line Argument Parsing ---
     parser = argparse.ArgumentParser(description="Run the Weather Station application.")
     parser.add_argument('--name', type=str, help="The name of this station (overrides config file).")
     parser.add_argument('--role', type=str, choices=['base', 'remote'], help="The LoRa role for this station (overrides config file).")
+    # --- Add the new station ID argument ---
+    parser.add_argument('--id', type=int, help="The unique ID of this station (overrides config file).")
     args = parser.parse_args()
 
     load_dotenv()
     config = load_config()
     
-    # --- 2. Override config with command-line arguments if provided ---
+    # --- Override config with command-line arguments if provided ---
     if args.name:
         config['station_info']['station_name'] = args.name
         print(f"[Startup] Overriding station name with command-line arg: {args.name}")
     if args.role:
         config['lora']['role'] = args.role
         print(f"[Startup] Overriding LoRa role with command-line arg: {args.role}")
+    if args.id is not None: # Check against None because ID can be 0
+        config['station_info']['station_id'] = args.id
+        print(f"[Startup] Overriding station ID with command-line arg: {args.id}")
 
-    station_id = config.get('station_info', {}).get('station_id', 0)
+
+    station_id = config.get('station_info', {}).get('station_id')
     db_path = get_dynamic_db_path(config)
 
     print("\n--- Initializing Weather Station Platform ---")
