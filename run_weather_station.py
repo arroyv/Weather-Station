@@ -101,7 +101,8 @@ if __name__ == "__main__":
     print(f"  Station ID: {station_id}")
     print(f"  LoRa Role: {config['lora']['role']}")
 
-    db_manager = DatabaseManager(db_path, config)
+    # Reverted to simpler DatabaseManager initialization
+    db_manager = DatabaseManager(db_path)
 
     weather_station = WeatherStation(config, db_manager=db_manager)
     weather_station.discover_and_add_sensors()

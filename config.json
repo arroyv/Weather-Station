@@ -9,13 +9,12 @@
   },
   "timing": {
     "transmission_interval_seconds": 30,
-    "adafruit_io_interval_seconds": 300,
-    "lora_time_sync_interval_seconds": 3600
+    "adafruit_io_interval_seconds": 300
   },
   "database": {
     "drive_label": "WSS"
   },
-"lora": {
+  "lora": {
     "role": "base",
     "device": "/dev/ttyS0",
     "frequency": 915.0,
@@ -32,60 +31,17 @@
       "enabled": true,
       "polling_rate": 600,
       "metrics": {
-        "moisture-rh": {
-          "register": 1,
-          "decimals": 1,
-          "correction": {
-            "type": "map",
-            "raw_min": 310,
-            "raw_max": 780
-          },
-          "feed_key": "soil-moisture-rh",
-          "label": "Soil Moisture",
-          "unit": "%RH"
-        },
-        "temp-c": {
-          "register": 0,
-          "decimals": 1,
-          "signed": true,
-          "correction": {
-            "type": "linear",
-            "offset": 0.5
-          },
-          "feed_key": "soil-temp-c",
-          "label": "Soil Temperature",
-          "unit": "C"
-        }
+        "moisture-rh": { "register": 1, "decimals": 1, "label": "Soil Moisture", "unit": "%RH" },
+        "temp-c": { "register": 0, "decimals": 1, "signed": true, "label": "Soil Temperature", "unit": "°C" }
       }
     },
     "2": {
       "name": "atmosphere",
       "enabled": true,
-      "polling_rate": 120,
+      "polling_rate": 600,
       "metrics": {
-        "humidity-rh": {
-          "register": 0,
-          "decimals": 1,
-          "correction": {
-            "type": "linear",
-            "offset": -5.0
-          },
-          "feed_key": "atmosphere-humidity-rh",
-          "label": "Humidity",
-          "unit": "%RH"
-        },
-        "temp-c": {
-          "register": 1,
-          "decimals": 1,
-          "signed": true,
-          "correction": {
-            "type": "linear",
-            "offset": -1.1
-          },
-          "feed_key": "atmosphere-temp-c",
-          "label": "Air Temperature",
-          "unit": "C"
-        }
+        "humidity-rh": { "register": 0, "decimals": 1, "label": "Humidity", "unit": "%RH" },
+        "temp-c": { "register": 1, "decimals": 1, "signed": true, "label": "Air Temperature", "unit": "°C" }
       }
     },
     "3": {
@@ -93,57 +49,24 @@
       "polling_rate": 60,
       "enabled": true,
       "metrics": {
-        "ppm": {
-          "register": 2,
-          "decimals": 0,
-          "correction": {},
-          "feed_key": "co2-ppm",
-          "label": "CO2",
-          "unit": "ppm"
-        }
+        "ppm": { "register": 2, "decimals": 0, "label": "CO2", "unit": "ppm" }
       }
     },
     "4": {
       "name": "light",
-      "polling_rate": 900,
+      "polling_rate": 600,
       "enabled": true,
       "metrics": {
-        "lux": {
-          "register": 6,
-          "decimals": 0,
-          "function": "read_long",
-          "correction": {},
-          "feed_key": "light-lux",
-          "label": "Light Level",
-          "unit": "lux"
-        }
+        "lux": { "register": 6, "decimals": 0, "label": "Light Level", "unit": "lux" }
       }
     },
     "5": {
       "name": "pressure",
-      "polling_rate": 900,
+      "polling_rate": 600,
       "enabled": true,
       "metrics": {
-        "kpa": {
-          "register": 0,
-          "decimals": 1,
-          "correction": {
-            "type": "linear",
-            "factor": 0.001
-          },
-          "feed_key": "pressure-kpa",
-          "label": "Pressure",
-          "unit": "kPa"
-        },
-        "temp-c": {
-          "register": 1,
-          "decimals": 1,
-          "signed": true,
-          "correction": {},
-          "feed_key": "pressure-temp-c",
-          "label": "Temperature",
-          "unit": "C"
-        }
+        "kpa": { "register": 0, "decimals": 1, "label": "Pressure", "unit": "kPa" },
+        "temp-c": { "register": 1, "decimals": 1, "signed": true, "label": "Baro Temperature", "unit": "°C" }
       }
     },
     "6": {
@@ -151,14 +74,7 @@
       "polling_rate": 120,
       "enabled": true,
       "metrics": {
-        "direction": {
-          "register": 0,
-          "decimals": 0,
-          "correction": {},
-          "feed_key": "wind-direction",
-          "label": "Wind Direction",
-          "unit": ""
-        }
+        "direction": { "register": 0, "decimals": 0, "label": "Wind Direction", "unit": "°" }
       }
     },
     "7": {
@@ -166,14 +82,7 @@
       "polling_rate": 120,
       "enabled": true,
       "metrics": {
-        "speed-ms": {
-          "register": 0,
-          "decimals": 1,
-          "correction": {},
-          "feed_key": "wind-speed-ms",
-          "label": "Wind Speed",
-          "unit": "m/s"
-        }
+        "speed-ms": { "register": 0, "decimals": 1, "label": "Wind Speed", "unit": "m/s" }
       }
     }
   },
@@ -184,7 +93,6 @@
     "mm_per_tip": 0.5,
     "debounce_ms": 250,
     "metric": "mm",
-    "feed_key": "rain-mm",
     "label": "Rainfall",
     "unit": "mm"
   }

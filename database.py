@@ -5,47 +5,18 @@ import datetime
 from threading import Lock
 
 class DatabaseManager:
-    """
-    Handles all interactions with the SQLite database using a "wide" table format,
-    dynamically building the schema from the configuration file.
-    """
-    def __init__(self, db_path, config):
+    def __init__(self, db_path):
         self.db_path = db_path
         self._lock = Lock()
         self.conn = None
-        self.config = config
-        # Generate the column schema from the config
-        self.db_columns = self._get_columns_from_config()
-        
         try:
             os.makedirs(os.path.dirname(db_path), exist_ok=True)
         except FileExistsError:
             pass
         self.connect()
-        self.create_table()
-
-    def _get_columns_from_config(self):
-        """Builds a list of database column names and types from the config."""
-        columns = []
-        # Add columns for Modbus sensors
-        for s_conf in self.config.get('sensors', {}).values():
-            for metric in s_conf.get('metrics', {}).keys():
-                # Sanitize metric name for SQL column name
-                col_name = f"{s_conf['name']}_{metric.replace('-', '_')}"
-                columns.append(f"{col_name} REAL")
-        
-        # Add column for Rain Gauge
-        rg_conf = self.config.get('rain_gauge', {})
-        if rg_conf and rg_conf.get('enabled'):
-            col_name = f"{rg_conf['name']}_{rg_conf['metric']}"
-            columns.append(f"{col_name} REAL")
-            
-        # Add column for LoRa signal strength
-        columns.append("rssi REAL")
-        return sorted(list(set(columns))) # Sort for consistent column order
+        self.create_tables()
 
     def connect(self):
-        """Establishes a connection to the database."""
         try:
             self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
             self.conn.row_factory = sqlite3.Row
@@ -55,94 +26,99 @@ class DatabaseManager:
             raise
 
     def close(self):
-        """Closes the database connection."""
         if self.conn:
             self.conn.close()
-            # print(f"[Database] Closed connection to {self.db_path}")
 
-    def create_table(self):
-        """Creates a single 'snapshots' table with a column for each sensor metric."""
+    def create_tables(self):
         with self._lock:
             try:
                 cursor = self.conn.cursor()
-                columns_sql = ",\n".join(self.db_columns)
-                query = f"""
-                    CREATE TABLE IF NOT EXISTS snapshots (
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS readings (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         timestamp TEXT NOT NULL,
                         station_id INTEGER NOT NULL,
-                        {columns_sql}
+                        sensor TEXT NOT NULL,
+                        metric TEXT NOT NULL,
+                        value REAL NOT NULL,
+                        rssi REAL
                     )
-                """
-                cursor.execute(query)
+                ''')
                 self.conn.commit()
             except sqlite3.Error as e:
-                print(f"[Database] ERROR: Could not create table: {e}")
+                print(f"[Database] ERROR: Could not create tables: {e}")
 
-    def write_snapshot(self, station_id, snapshot_data):
-        """Writes a full row of sensor data to the snapshots table."""
+    def write_reading(self, station_id, sensor, metric, value, rssi=None, timestamp=None):
+        ts = timestamp if timestamp else datetime.datetime.now(datetime.timezone.utc).isoformat()
         with self._lock:
             try:
-                column_names = [col.split()[0] for col in self.db_columns]
-                columns_for_sql = ['timestamp', 'station_id'] + column_names
-                placeholders = ', '.join(['?'] * len(columns_for_sql))
-                
-                values = [datetime.datetime.now(datetime.timezone.utc).isoformat(), station_id]
-                for col_name in column_names:
-                    values.append(snapshot_data.get(col_name))
-
                 cursor = self.conn.cursor()
                 cursor.execute(
-                    f"INSERT INTO snapshots ({', '.join(columns_for_sql)}) VALUES ({placeholders})",
-                    tuple(values)
+                    "INSERT INTO readings (timestamp, station_id, sensor, metric, value, rssi) VALUES (?, ?, ?, ?, ?, ?)",
+                    (ts, station_id, sensor, metric, value, rssi)
                 )
                 self.conn.commit()
                 return cursor.lastrowid
             except sqlite3.Error as e:
-                print(f"[Database] ERROR: Failed to write snapshot: {e}")
+                print(f"[Database] ERROR: Failed to write reading: {e}")
                 return None
 
-    def get_latest_snapshot(self, station_id):
-        """Retrieves the most recent snapshot for a given station."""
+    def get_latest_readings_by_station(self):
         with self._lock:
             try:
                 cursor = self.conn.cursor()
-                cursor.execute("SELECT * FROM snapshots WHERE station_id = ? ORDER BY timestamp DESC LIMIT 1", (station_id,))
-                row = cursor.fetchone()
-                return dict(row) if row else None
+                query = """
+                    SELECT r.* FROM readings r
+                    INNER JOIN (
+                        SELECT station_id, sensor, metric, MAX(timestamp) AS max_ts
+                        FROM readings
+                        GROUP BY station_id, sensor, metric
+                    ) AS latest ON r.station_id = latest.station_id
+                               AND r.sensor = latest.sensor
+                               AND r.metric = latest.metric
+                               AND r.timestamp = latest.max_ts;
+                """
+                cursor.execute(query)
+                rows = cursor.fetchall()
+                data_by_station = {}
+                for row in rows:
+                    station_id = row['station_id']
+                    if station_id not in data_by_station:
+                        data_by_station[station_id] = {}
+                    key = f"{row['sensor']}-{row['metric']}"
+                    data_by_station[station_id][key] = dict(row)
+                return data_by_station
             except sqlite3.Error as e:
-                print(f"[Database] ERROR: Could not fetch latest snapshot: {e}")
-                return None
+                print(f"[Database] ERROR: Could not fetch latest readings: {e}")
+                return {}
 
     def get_historical_data(self, station_id, hours, metric_column):
-        """Retrieves historical data for a specific metric column."""
-        valid_columns = [col.split()[0] for col in self.db_columns]
-        if metric_column not in valid_columns:
-            raise ValueError(f"Invalid metric column requested: {metric_column}")
-
+        # This method needs to be adapted for the "long" format.
+        # The metric_column is now a combination of sensor and metric.
+        sensor_name, metric_name = metric_column.split('_', 1)
+        metric_name = metric_name.replace('_', '-')
+        
         with self._lock:
             try:
                 cursor = self.conn.cursor()
-                query = f"""
-                    SELECT timestamp, {metric_column} as value FROM snapshots
-                    WHERE station_id = ? AND timestamp >= datetime('now', '-' || ? || ' hours')
+                query = """
+                    SELECT timestamp, value FROM readings 
+                    WHERE station_id = ? AND sensor = ? AND metric = ? AND timestamp >= datetime('now', '-' || ? || ' hours') 
                     ORDER BY timestamp ASC
                 """
-                cursor.execute(query, (station_id, hours))
-                # Fetch all and convert to list of dicts to ensure connection is not needed later
+                cursor.execute(query, (station_id, sensor_name, metric_name, hours))
                 return [dict(row) for row in cursor.fetchall()]
             except sqlite3.Error as e:
                 print(f"[Database] ERROR: Could not fetch historical data: {e}")
                 return []
 
-    def get_unsent_snapshot(self, station_id, last_sent_id):
-        """Retrieves the latest snapshot that has not yet been sent."""
+    def get_unsent_lora_data(self, station_id, last_sent_id, limit=3):
         with self._lock:
             try:
                 cursor = self.conn.cursor()
-                cursor.execute("SELECT * FROM snapshots WHERE station_id = ? AND id > ? ORDER BY id DESC LIMIT 1", (station_id, last_sent_id))
-                row = cursor.fetchone()
-                return dict(row) if row else None
+                query = "SELECT * FROM readings WHERE station_id = ? AND id > ? ORDER BY id ASC LIMIT ?"
+                cursor.execute(query, (station_id, last_sent_id, limit))
+                return cursor.fetchall()
             except sqlite3.Error as e:
-                print(f"[Database] ERROR: Could not fetch unsent snapshot: {e}")
-                return None
+                print(f"[Database] ERROR: Could not fetch unsent LoRa data: {e}")
+                return []

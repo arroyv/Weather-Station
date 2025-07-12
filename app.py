@@ -33,20 +33,6 @@ def get_all_db_paths(local_db_path):
     db_dir = os.path.dirname(local_db_path)
     return glob.glob(os.path.join(db_dir, '*.db'))
 
-def build_metric_info_map(config):
-    """Builds a lookup map from DB column name to its label and unit."""
-    metric_map = {}
-    for s_conf in config.get('sensors', {}).values():
-        for metric, m_conf in s_conf.get('metrics', {}).items():
-            col_name = f"{s_conf['name']}_{metric.replace('-', '_')}"
-            metric_map[col_name] = {'label': m_conf.get('label', col_name), 'unit': m_conf.get('unit', '')}
-    if config.get('rain_gauge', {}).get('enabled'):
-        rg_conf = config['rain_gauge']
-        col_name = f"{rg_conf['name']}_{rg_conf['metric']}"
-        metric_map[col_name] = {'label': rg_conf.get('label', col_name), 'unit': rg_conf.get('unit', '')}
-    metric_map['rssi'] = {'label': 'RSSI', 'unit': 'dBm'}
-    return metric_map
-
 def get_enriched_data():
     with cache_lock:
         now = time.time()
@@ -55,7 +41,6 @@ def get_enriched_data():
 
         print("[Dashboard] Cache expired. Rebuilding data from databases.")
         config = load_config()
-        metric_info_map = build_metric_info_map(config)
         local_db_path = get_local_db_path(config)
         all_db_files = get_all_db_paths(local_db_path)
         
@@ -65,53 +50,39 @@ def get_enriched_data():
             station_db_map.clear()
             for db_file in all_db_files:
                 try:
-                    db_manager = DatabaseManager(db_file, config)
-                    temp_conn = sqlite3.connect(db_file)
-                    cursor = temp_conn.cursor()
-                    cursor.execute("SELECT DISTINCT station_id FROM snapshots")
-                    station_ids_in_db = [row[0] for row in cursor.fetchall()]
-                    temp_conn.close()
-
-                    for station_id in station_ids_in_db:
-                        data = db_manager.get_latest_snapshot(station_id)
-                        if data:
-                            latest_data_by_station[station_id] = data
-                            station_db_map[station_id] = db_file
+                    db_manager = DatabaseManager(db_file)
+                    data = db_manager.get_latest_readings_by_station()
+                    for station_id in data.keys():
+                        station_db_map[station_id] = db_file
+                    latest_data_by_station.update(data)
                     db_manager.close()
                 except Exception as e:
                     print(f"[Dashboard] ERROR reading from {db_file}: {e}")
         
-        enriched_data = {}
         direction_map = { 0: "N", 1: "NE", 2: "E", 3: "SE", 4: "S", 5: "SW", 6: "W", 7: "NW" }
 
-        for station_id, snapshot in latest_data_by_station.items():
-            enriched_data[station_id] = {}
-            if not snapshot: continue
-            
-            for col_name, value in snapshot.items():
-                if value is None or col_name in ['id', 'timestamp', 'station_id']:
-                    continue
+        for station_id, readings in latest_data_by_station.items():
+            for key, reading in readings.items():
+                sensor_name = reading['sensor']
+                metric_name = reading['metric']
                 
-                info = metric_info_map.get(col_name, {'label': col_name, 'unit': ''})
+                if sensor_name == 'wind-direction' and metric_name == 'direction':
+                    reading['display_value'] = direction_map.get(int(reading['value']), 'Unknown')
                 
-                # Reconstruct the original key format (e.g., 'soil-temp-c') for the template
-                parts = col_name.split('_', 1)
-                original_key = f"{parts[0]}-{parts[1].replace('_', '-')}" if len(parts) > 1 else parts[0]
-                
-                reading = {
-                    'value': value,
-                    'label': info['label'],
-                    'unit': info['unit'],
-                    'timestamp': snapshot['timestamp']
-                }
+                # Look up label and unit from config
+                for s_conf in config.get('sensors', {}).values():
+                    if s_conf['name'] == sensor_name:
+                        metric_conf = s_conf.get('metrics', {}).get(metric_name)
+                        if metric_conf:
+                            reading['label'] = metric_conf.get('label', key)
+                            reading['unit'] = metric_conf.get('unit', '')
+                        break
+                rg_conf = config.get('rain_gauge', {})
+                if rg_conf.get('name') == sensor_name:
+                     reading['label'] = rg_conf.get('label', key)
+                     reading['unit'] = rg_conf.get('unit', '')
 
-                # Special handling for wind direction display
-                if col_name == 'wind_direction_direction':
-                    reading['display_value'] = direction_map.get(int(value), 'Unknown')
-                
-                enriched_data[station_id][original_key] = reading
-
-        cache['data'] = enriched_data
+        cache['data'] = latest_data_by_station
         cache['last_updated'] = now
         return cache['data']
 
@@ -121,14 +92,12 @@ def get_history(station_id, sensor_key, hours):
         db_path = station_db_map.get(station_id)
 
     if not db_path:
-        return jsonify({"error": "Station not found or map not populated"}), 404
+        return jsonify({"error": "Station not found"}), 404
 
     try:
-        config = load_config()
-        db = DatabaseManager(db_path, config)
-        # Convert sensor_key back to a valid SQL column name
-        metric_column = sensor_key.replace('-', '_')
-        historical_data = db.get_historical_data(station_id, hours, metric_column)
+        db = DatabaseManager(db_path)
+        # The key is now the metric_column for the query
+        historical_data = db.get_historical_data(station_id, hours, sensor_key)
         db.close()
         return jsonify(historical_data)
     except Exception as e:
@@ -164,9 +133,30 @@ def settings():
     if request.method == 'POST':
         try:
             current_config = load_config()
-            # ... (rest of settings POST logic is the same)
+            current_config['services']['adafruit_io_enabled'] = 'adafruit_io_enabled' in request.form
+            current_config['services']['lora_enabled'] = 'lora_enabled' in request.form
+            current_config['station_info']['station_name'] = request.form.get('station_name', 'default-name')
+            
+            current_config['timing']['transmission_interval_seconds'] = max(1, request.form.get('transmission_interval_seconds', 60, type=int))
+            current_config['timing']['adafruit_io_interval_seconds'] = max(10, request.form.get('adafruit_io_interval_seconds', 300, type=int))
+            current_config['lora']['role'] = request.form.get('lora_role', 'base')
+            current_config['lora']['frequency'] = float(request.form.get('lora_frequency', 915.0))
+            current_config['lora']['tx_power'] = min(23, max(5, request.form.get('lora_tx_power', 23, type=int)))
+            current_config['lora']['local_address'] = int(request.form.get('lora_local_address', 1))
+            current_config['lora']['remote_address'] = int(request.form.get('lora_remote_address', 2))
+
+            for sensor_id, sensor_config in current_config.get('sensors', {}).items():
+                current_config['sensors'][sensor_id]['enabled'] = f"enabled_{sensor_config['name']}" in request.form
+                rate = request.form.get(f"polling_rate_{sensor_config['name']}", type=int)
+                current_config['sensors'][sensor_id]['polling_rate'] = max(1, rate) if rate is not None else 60
+            
+            if 'rain_gauge' in current_config:
+                current_config['rain_gauge']['enabled'] = 'enabled_rain' in request.form
+
             save_config(current_config)
             flash("Configuration saved successfully!", "success")
+        except (ValueError, TypeError) as e:
+            flash(f"Error saving configuration: Invalid input. ({e})", "danger")
         except Exception as e:
             flash(f"Error saving configuration: {e}", "danger")
         return redirect(url_for('settings'))
