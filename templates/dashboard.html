@@ -4,16 +4,26 @@
     <meta charset="UTF-8">
     <title>Weather Station Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <meta http-equiv="refresh" content="30">
+    <meta http-equiv="refresh" content="60">
     <style>
         body { background-color: #f8f9fa; }
         .metric-card { border-left-width: 5px; }
         .metric-value { font-size: 2rem; font-weight: bold; }
         .metric-label { font-size: 1rem; color: #6c757d; }
+        .graph-container {
+            display: none; /* Hidden by default */
+            margin-top: 1rem;
+            padding: 1rem;
+            background-color: #ffffff;
+            border-radius: 0.25rem;
+            border: 1px solid #dee2e6;
+        }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 </head>
 <body>
-    <div class="container mt-4">
+    <div class="container mt-4 mb-5">
         <div class="d-flex justify-content-between align-items-center mb-4">
             <h1>Dashboard</h1>
             <a href="/settings" class="btn btn-secondary">Settings</a>
@@ -30,23 +40,31 @@
         <div class="tab-content" id="stationTabContent">
             {% for station in station_tabs %}
             <div class="tab-pane fade" id="station-{{ station.id }}" role="tabpanel">
-                <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-4 py-4">
+                <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 g-4 py-4">
                     {% for key, reading in station.data.items() %}
                     <div class="col">
                         <div class="card h-100 shadow-sm metric-card">
                             <div class="card-body">
                                 <div class="metric-value">{{ '%.2f'|format(reading.value) }}</div>
                                 <div class="metric-label">{{ reading.label }} ({{ reading.unit }})</div>
+                                <div class="mt-3">
+                                    <div class="btn-group btn-group-sm" role="group">
+                                        <button type="button" class="btn btn-outline-primary time-range-btn" data-hours="24" data-station-id="{{ station.id }}" data-sensor-key="{{ key }}">24h</button>
+                                        <button type="button" class="btn btn-outline-primary time-range-btn" data-hours="168" data-station-id="{{ station.id }}" data-sensor-key="{{ key }}">7d</button>
+                                        <button type="button" class="btn btn-outline-primary time-range-btn" data-hours="720" data-station-id="{{ station.id }}" data-sensor-key="{{ key }}">30d</button>
+                                    </div>
+                                </div>
                             </div>
                             <div class="card-footer text-muted" style="font-size: 0.8rem;">
                                 Updated: {{ reading.timestamp.split('T')[1].split('.')[0] }}
                             </div>
+                            <div class="graph-container" id="graph-container-{{ station.id }}-{{ key }}">
+                                <canvas id="chart-{{ station.id }}-{{ key }}"></canvas>
+                            </div>
                         </div>
                     </div>
                     {% else %}
-                    <div class="col-12">
-                        <p class="text-center text-muted">No data available for this station.</p>
-                    </div>
+                    <div class="col-12"><p class="text-center text-muted">No data available for this station.</p></div>
                     {% endfor %}
                 </div>
             </div>
@@ -57,46 +75,95 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            // --- Tab Persistence Logic ---
             const stationTab = document.getElementById('stationTab');
             const tabButtons = stationTab.querySelectorAll('.nav-link');
             const tabContentPanes = document.querySelectorAll('.tab-pane');
             const lastTabKey = 'lastActiveStationTab';
-
-            // Function to activate a tab
+            
             function activateTab(tabButton) {
                 if (!tabButton) return;
-                
-                // Deactivate all others
                 tabButtons.forEach(btn => btn.classList.remove('active'));
-                tabContentPanes.forEach(pane => {
-                    pane.classList.remove('show', 'active');
-                });
-                
-                // Activate the correct one
+                tabContentPanes.forEach(pane => pane.classList.remove('show', 'active'));
                 tabButton.classList.add('active');
                 const targetPane = document.querySelector(tabButton.dataset.bsTarget);
-                if (targetPane) {
-                    targetPane.classList.add('show', 'active');
-                }
+                if (targetPane) targetPane.classList.add('show', 'active');
             }
 
-            // Store the ID of the clicked tab
-            stationTab.addEventListener('click', function (event) {
-                if (event.target.classList.contains('nav-link')) {
-                    localStorage.setItem(lastTabKey, event.target.id);
-                }
+            stationTab.addEventListener('click', e => {
+                if (e.target.classList.contains('nav-link')) localStorage.setItem(lastTabKey, e.target.id);
             });
 
-            // On page load, try to activate the last selected tab
             const lastTabId = localStorage.getItem(lastTabKey);
-            let tabToActivate = document.getElementById(lastTabId);
+            activateTab(document.getElementById(lastTabId) || tabButtons[0]);
 
-            // If last selected tab doesn't exist or isn't found, default to the first tab
-            if (!tabToActivate) {
-                tabToActivate = tabButtons[0];
-            }
-            
-            activateTab(tabToActivate);
+            // --- Charting Logic ---
+            const charts = {}; // To store chart instances
+
+            document.querySelectorAll('.time-range-btn').forEach(button => {
+                button.addEventListener('click', async (event) => {
+                    const { stationId, sensorKey, hours } = event.target.dataset;
+                    const container = document.getElementById(`graph-container-${stationId}-${sensorKey}`);
+                    
+                    // Show spinner or loading text
+                    container.style.display = 'block';
+                    container.innerHTML = '<div class="text-center">Loading...</div>';
+
+                    try {
+                        const response = await fetch(`/api/history/${stationId}/${sensorKey}/${hours}`);
+                        if (!response.ok) throw new Error(`Network response was not ok: ${response.statusText}`);
+                        const data = await response.json();
+                        
+                        // Clear loading text and re-add canvas
+                        container.innerHTML = `<canvas id="chart-${stationId}-${sensorKey}"></canvas>`;
+                        const ctx = document.getElementById(`chart-${stationId}-${sensorKey}`).getContext('2d');
+
+                        if (charts[sensorKey]) {
+                            charts[sensorKey].destroy(); // Destroy old chart instance
+                        }
+
+                        if (data.length === 0) {
+                            container.innerHTML = '<div class="text-center text-muted">No historical data available.</div>';
+                            return;
+                        }
+
+                        charts[sensorKey] = new Chart(ctx, {
+                            type: 'line',
+                            data: {
+                                datasets: [{
+                                    label: sensorKey,
+                                    data: data.map(d => ({ x: new Date(d.timestamp), y: d.value })),
+                                    borderColor: 'rgba(0, 123, 255, 1)',
+                                    borderWidth: 2,
+                                    pointRadius: 0,
+                                    tension: 0.1
+                                }]
+                            },
+                            options: {
+                                scales: {
+                                    x: {
+                                        type: 'time',
+                                        time: {
+                                            unit: 'day',
+                                            tooltipFormat: 'MMM d, yyyy h:mm a'
+                                        },
+                                        title: { display: false }
+                                    },
+                                    y: {
+                                        title: { display: false }
+                                    }
+                                },
+                                plugins: {
+                                    legend: { display: false }
+                                }
+                            }
+                        });
+                    } catch (error) {
+                        console.error('Failed to fetch graph data:', error);
+                        container.innerHTML = '<div class="text-center text-danger">Failed to load data.</div>';
+                    }
+                });
+            });
         });
     </script>
 </body>
