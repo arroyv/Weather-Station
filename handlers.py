@@ -248,8 +248,6 @@ class LoRaHandler(BaseHandler):
             print(f"[{self.name}] Received data packet with no payload or station_id.")
             return
 
-        print(f"[{self.name}] Received id:{payload[0]['id']} data record from '{station_name}' (ID: {station_id}) with RSSI: {rssi}")
-
         # Get the specific database for this remote station
         remote_db = self.get_remote_db(station_name)
 
@@ -262,3 +260,6 @@ class LoRaHandler(BaseHandler):
                 value=record['value'],
                 rssi=rssi
             )
+            print(f"[{self.name}] Received id:{record['id']} data record from '{station_name}' (ID: {station_id}) with RSSI: {rssi}")
+
+        return payload[-1]['id']
