@@ -195,7 +195,7 @@ class ModbusSensor:
                         if corrected_value is not None:
                             self.db_manager.write_reading(self.station_id, self.name, metric_name, corrected_value)
                             if self.debug: print(f"Logged: {self.name}/{metric_name} = {corrected_value:.2f}")
-
+                    print("PLEASE PRINT!!!!")
                 except (IOError, ValueError) as e:
                     print(f"ERROR: Read failed for '{self.name}': {e}")
             

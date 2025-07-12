@@ -152,6 +152,7 @@ class LoRaHandler(BaseHandler):
         packet = {'type': 'data', 'payload': [dict(r) for r in records]}
         print(f"[{self.name}] Sending {len(records)} data records.")
         with self.lora_lock:
+            print(packet)
             self.rfm9x.send(json.dumps(packet).encode("utf-8"))
         self.last_data_sent_id = records[-1]['id']
 
@@ -168,6 +169,7 @@ class LoRaHandler(BaseHandler):
         if time.time() - self.last_config_sent_time > 300:
             print(f"[{self.name}] Sending remote config update.")
             with self.lora_lock:
+                print(len(json.dumps(packet).encode("utf-8")))
                 self.rfm9x.send(json.dumps(packet).encode("utf-8"))
             self.last_config_sent_time = time.time()
 

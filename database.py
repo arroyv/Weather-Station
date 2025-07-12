@@ -59,6 +59,7 @@ class DatabaseManager:
                     (ts, station_id, sensor, metric, value, rssi)
                 )
                 self.conn.commit()
+                print("inserted tuple to db")
                 return cursor.lastrowid
             except sqlite3.Error as e:
                 print(f"[Database] ERROR: Failed to write reading: {e}")

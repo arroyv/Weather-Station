@@ -8,7 +8,7 @@ from database import DatabaseManager
 # --- Configuration ---
 project_dir = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(project_dir, 'config.json')
-DB_PATH = os.path.join(project_dir, 'weather_data.db')
+DB_PATH = "/media/username/WSS2/weather_data.db"
 
 app = Flask(__name__)
 app.secret_key = 'super-secret-key-for-weather-station' 
