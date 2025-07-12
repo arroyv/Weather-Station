@@ -23,6 +23,13 @@
             background-color: #0d6efd;
             color: white;
         }
+        .nav-link {
+            color: #495057;
+        }
+        .nav-link.active {
+            font-weight: bold;
+            color: #000;
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
@@ -37,7 +44,9 @@
         <ul class="nav nav-tabs" id="stationTab" role="tablist">
             {% for station in station_tabs %}
             <li class="nav-item" role="presentation">
-                <button class="nav-link" id="station-{{ station.id }}-tab" data-bs-toggle="tab" data-bs-target="#station-tab-pane-{{ station.id }}" type="button" role="tab">{{ station.name }}</button>
+                <button class="nav-link" id="station-{{ station.id }}-tab" data-bs-toggle="tab" data-bs-target="#station-tab-pane-{{ station.id }}" type="button" role="tab">
+                    {{ station.db_name }} (ID: {{ station.id }}) {% if station.is_local %}(Local){% endif %}
+                </button>
             </li>
             {% endfor %}
         </ul>
@@ -106,7 +115,6 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            // --- Tab Persistence Logic ---
             const stationTab = document.getElementById('stationTab');
             const tabButtons = stationTab.querySelectorAll('.nav-link');
             const tabContentPanes = document.querySelectorAll('.tab-pane');
@@ -120,17 +128,17 @@
                 const targetPane = document.querySelector(tabButton.dataset.bsTarget);
                 if (targetPane) {
                     targetPane.classList.add('show', 'active');
-                    // Load graphs for the newly activated tab
                     const stationId = targetPane.id.split('-').pop();
                     const activeTimeControl = document.querySelector(`.global-time-range-group[data-station-id="${stationId}"] .btn.active`);
-                    updateAllGraphsForStation(stationId, activeTimeControl.dataset.hours);
+                    if (activeTimeControl) {
+                        updateAllGraphsForStation(stationId, activeTimeControl.dataset.hours);
+                    }
                 }
             }
 
             stationTab.addEventListener('click', e => {
                 if (e.target.classList.contains('nav-link')) {
                     localStorage.setItem(lastTabKey, e.target.id);
-                    // Manually activate tab here because the default bootstrap behavior might be slow
                     activateTab(e.target);
                 }
             });
@@ -138,19 +146,15 @@
             const lastTabId = localStorage.getItem(lastTabKey);
             const initialTab = document.getElementById(lastTabId) || tabButtons[0];
             if(initialTab){
-                 // Use a small timeout to ensure the tab content is visible before drawing charts
                 setTimeout(() => activateTab(initialTab), 50);
             }
            
-
-            // --- Charting Logic for Grid ---
-            const charts = {}; // To store all chart instances
+            const charts = {};
 
             async function updateGraph(canvas, stationId, sensorKey, hours) {
                 const chartId = `chart-${stationId}-${sensorKey}`;
                 const ctx = canvas.getContext('2d');
                 
-                // Show loading state
                 if (charts[chartId]) charts[chartId].destroy();
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.font = "16px sans-serif";
@@ -160,7 +164,7 @@
 
                 try {
                     const response = await fetch(`/api/history/${stationId}/${sensorKey}/${hours}`);
-                    if (!response.ok) throw new Error(`Network response was not ok: ${response.statusText}`);
+                    if (!response.ok) throw new Error(`Network response: ${response.statusText}`);
                     const data = await response.json();
 
                     if (data.length === 0) {
@@ -176,7 +180,7 @@
                                 data: data.map(d => ({ x: new Date(d.timestamp), y: d.value })),
                                 borderColor: 'rgba(0, 123, 255, 1)',
                                 borderWidth: 2,
-                                pointRadius: data.length < 100 ? 2 : 0, // Show points for smaller datasets
+                                pointRadius: data.length < 100 ? 2 : 0,
                                 tension: 0.1
                             }]
                         },
@@ -206,14 +210,12 @@
                 });
             }
 
-            // Add event listeners for the global time range buttons
             document.querySelectorAll('.global-time-range-group .btn').forEach(button => {
                 button.addEventListener('click', (event) => {
                     const group = event.target.closest('.global-time-range-group');
                     const { stationId } = group.dataset;
                     const { hours } = event.target.dataset;
                     
-                    // Update active state for buttons
                     group.querySelectorAll('.btn').forEach(btn => btn.classList.remove('active'));
                     event.target.classList.add('active');
 
