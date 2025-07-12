@@ -1,6 +1,6 @@
 {
   "station_info": {
-    "station_name": "greenhouse-remote",
+    "station_name": "greenhouse-base",
     "station_id": 2
   },
   "services": {
@@ -13,10 +13,10 @@
     "lora_time_sync_interval_seconds": 3600
   },
   "database": {
-    "drive_label": "WSS2"
+    "drive_label": "WSS"
   },
   "lora": {
-    "role": "remote",
+    "role": "base",
     "device": "/dev/ttyS0",
     "frequency": 915.0,
     "tx_power": 23
