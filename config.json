@@ -22,7 +22,7 @@
     "tx_power": 23,
     "ack_retries": 3,
     "ack_timeout": 2.0,
-    "ack_delay": 0.2
+    "ack_delay": 1.0
   },
   "sensors": {
     "1": {

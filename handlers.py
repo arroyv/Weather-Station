@@ -120,7 +120,7 @@ class LoRaHandler(BaseHandler):
             self.rfm9x = adafruit_rfm9x.RFM9x(spi, CS, RESET, self.lora_config.get('frequency', 915.0))
             self.rfm9x.enable_crc = True
             self.rfm9x.ack_retries = self.lora_config.get('ack_retries', 3)
-            self.rfm9x.ack_delay = self.lora_config.get('ack_delay', 0.2)
+            self.rfm9x.ack_delay = self.lora_config.get('ack_delay', 1.0)
             self.rfm9x.tx_power = self.lora_config.get('tx_power', 23)
             # Addressing is removed for broadcast mode
             # print(f"[{self.name}] RFM9x LoRa radio initialized in BROADCAST mode.")
@@ -203,7 +203,7 @@ class LoRaHandler(BaseHandler):
                 try:
                     success = self.rfm9x.send(message)
                     # Stop for a while then send the next packet
-                    time.sleep(self.lora_config.get('ack_delay', 0.2))
+                    time.sleep(self.lora_config.get('ack_delay', 1.0))
                 except Exception as e:
                     print(f"[{self.name}] ERROR: Failed to send message: {e}")
                 if success:
