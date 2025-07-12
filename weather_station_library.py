@@ -1,9 +1,16 @@
 # weather_station_library.py
 import os
 import time
-import minimalmodbus
 from threading import Thread, Event, Lock
-from gpiozero import Button
+
+# Import hardware-specific libraries
+try:
+    import minimalmodbus
+    from gpiozero import Button
+    HARDWARE_AVAILABLE = True
+except (ImportError, NotImplementedError):
+    print("[Warning] Hardware-specific libraries not found. Sensors will be disabled.")
+    HARDWARE_AVAILABLE = False
 
 class WeatherStation:
     def __init__(self, initial_config, db_manager=None):
@@ -18,10 +25,14 @@ class WeatherStation:
         self.station_id = self.config.get('station_info', {}).get('station_id', 0)
 
     def discover_and_add_sensors(self):
+        if not HARDWARE_AVAILABLE:
+            print("  [Discovery] Skipped due to missing hardware libraries.")
+            return
+
         config = self.config
         ports_to_scan = ['/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyACM2', '/dev/ttyACM3']
         
-        print(f"  [Discovery] Performing initial discovery of Modbus sensors...")
+        print("  [Discovery] Performing initial discovery of Modbus sensors...")
         found_addrs = {}
         for addr_str, s_conf in config.get('sensors', {}).items():
             if not s_conf.get('enabled', False):
@@ -29,7 +40,7 @@ class WeatherStation:
             addr = int(addr_str)
             for port in ports_to_scan:
                 if os.path.exists(port) and self._test_sensor_at_location(port, addr):
-                    print(f"Found '{s_conf['name']}' (addr {addr}) on {port}")
+                    print(f"  [Discovery] Found '{s_conf['name']}' (addr {addr}) on {port}")
                     found_addrs[addr] = port
                     break
         
@@ -55,13 +66,20 @@ class WeatherStation:
 
     def update_config(self, new_config):
         self.config = new_config
-        # Update existing sensors
+        # This is a simplified update. A more robust implementation would handle
+        # adding/removing sensors without a full restart.
         for sensor in self.sensors.values():
             if hasattr(sensor, 'name'):
+                # Find corresponding config for Modbus sensors
                 for s_conf in self.config.get('sensors', {}).values():
                     if s_conf['name'] == sensor.name:
                         sensor.update_config(s_conf)
                         break
+                # Find config for rain gauge
+                rg_conf = self.config.get('rain_gauge', {})
+                if rg_conf.get('name') == sensor.name:
+                    sensor.update_config(rg_conf)
+
 
     def _test_sensor_at_location(self, port, address):
         try:
@@ -69,7 +87,7 @@ class WeatherStation:
                 inst = minimalmodbus.Instrument(port, address)
                 inst.serial.baudrate = 4800
                 inst.serial.timeout = 1.0
-                inst.read_register(0, 0)
+                inst.read_register(0, 0) # Try reading a common register
             return True
         except (IOError, ValueError):
             return False
@@ -88,6 +106,7 @@ class ModbusSensor:
         if not self.db_manager:
             raise ValueError("ModbusSensor requires a db_manager instance.")
         
+        self.poller_thread = None
         self.update_config(initial_config)
 
     def update_config(self, new_config):
@@ -95,6 +114,7 @@ class ModbusSensor:
         self.metric_configs = new_config['metrics']
         self.polling_rate = new_config.get('polling_rate', 600)
         self.enabled = new_config.get('enabled', False)
+        if self.debug: print(f"[{self.name}] Config updated. Polling rate: {self.polling_rate}s. Enabled: {self.enabled}")
 
     def start(self):
         if self.enabled:
@@ -103,7 +123,7 @@ class ModbusSensor:
 
     def stop(self):
         self._stop_event.set()
-        if self.poller_thread:
+        if self.poller_thread and self.poller_thread.is_alive():
             self.poller_thread.join()
 
     def _poll(self):
@@ -123,9 +143,9 @@ class ModbusSensor:
                         
                         if raw_value is not None:
                             self.db_manager.write_reading(self.station_id, self.name, metric_name, raw_value)
-                            if self.debug: print(f"Logged: {self.name}/{metric_name} = {raw_value:.2f}")
+                            if self.debug: print(f"[{self.name}] Logged: {metric_name} = {raw_value:.2f}")
                 except (IOError, ValueError) as e:
-                    print(f"ERROR: Read failed for '{self.name}': {e}")
+                    print(f"[{self.name}] ERROR: Read failed: {e}")
 
 class RainGaugeSensor:
     def __init__(self, initial_config, **kwargs):
@@ -135,7 +155,7 @@ class RainGaugeSensor:
         if not self.db_manager:
             raise ValueError("RainGaugeSensor requires a db_manager instance.")
 
-        self.update__config(initial_config)
+        self.update_config(initial_config)
         self.button = Button(self.gpio_pin, pull_up=True, bounce_time=self.debounce_ms / 1000.0)
 
     def update_config(self, new_config):
@@ -145,6 +165,7 @@ class RainGaugeSensor:
         self.mm_per_tip = new_config['mm_per_tip']
         self.debounce_ms = new_config.get('debounce_ms', 250)
         self.enabled = new_config.get('enabled', False)
+        if self.debug: print(f"[{self.name}] Config updated. Enabled: {self.enabled}")
 
     def start(self):
         if self.enabled:
@@ -156,4 +177,4 @@ class RainGaugeSensor:
     def _tip_callback(self):
         if self.enabled:
             self.db_manager.write_reading(self.station_id, self.name, self.metric, self.mm_per_tip)
-            if self.debug: print(f"Logged: [Tipped!] Rain gauge event.")
+            if self.debug: print(f"[{self.name}] Logged: Rain gauge tipped!")

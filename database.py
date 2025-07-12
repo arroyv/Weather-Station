@@ -112,7 +112,7 @@ class DatabaseManager:
                 print(f"[Database] ERROR: Could not fetch historical data: {e}")
                 return []
 
-    def get_unsent_lora_data(self, station_id, last_sent_id, limit=3):
+    def get_unsent_lora_data(self, station_id, last_sent_id, limit=20):
         with self._lock:
             try:
                 cursor = self.conn.cursor()

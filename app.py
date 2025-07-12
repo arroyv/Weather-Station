@@ -3,7 +3,6 @@ import os
 import json
 import glob
 import time 
-import sqlite3
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
 from threading import Lock
 from database import DatabaseManager
@@ -29,8 +28,15 @@ def load_config():
         with open(CONFIG_PATH, 'r') as f:
             return json.load(f)
 
+def save_config(config_data):
+    with config_lock:
+        with open(CONFIG_PATH, 'w') as f:
+            json.dump(config_data, f, indent=2)
+
 def get_all_db_paths(local_db_path):
     db_dir = os.path.dirname(local_db_path)
+    if not os.path.isdir(db_dir):
+        return []
     return glob.glob(os.path.join(db_dir, '*.db'))
 
 def get_enriched_data():
@@ -71,7 +77,6 @@ def get_enriched_data():
                 if sensor_name == 'wind-direction' and metric_name == 'direction':
                     reading_dict['display_value'] = direction_map.get(int(reading['value']), 'Unknown')
                 
-                # Look up label and unit from config
                 label, unit = key, ""
                 for s_conf in config.get('sensors', {}).values():
                     if s_conf['name'] == sensor_name:
@@ -89,7 +94,6 @@ def get_enriched_data():
                 reading_dict['unit'] = unit
                 latest_data_by_station[station_id][key] = reading_dict
 
-
         cache['data'] = latest_data_by_station
         cache['last_updated'] = now
         return cache['data']
@@ -103,8 +107,9 @@ def get_history(station_id, sensor_key, hours):
         return jsonify({"error": "Station not found"}), 404
 
     try:
+        sensor, metric = sensor_key.split('-', 1)
         db = DatabaseManager(db_path)
-        historical_data = db.get_historical_data(station_id, hours, sensor_key)
+        historical_data = db.get_historical_data(station_id, sensor, metric, hours)
         db.close()
         return jsonify(historical_data)
     except Exception as e:
@@ -149,8 +154,7 @@ def settings():
             current_config['lora']['role'] = request.form.get('lora_role', 'base')
             current_config['lora']['frequency'] = float(request.form.get('lora_frequency', 915.0))
             current_config['lora']['tx_power'] = min(23, max(5, request.form.get('lora_tx_power', 23, type=int)))
-            current_config['lora']['local_address'] = int(request.form.get('lora_local_address', 1))
-            current_config['lora']['remote_address'] = int(request.form.get('lora_remote_address', 2))
+            current_config['lora']['base_station_address'] = int(request.form.get('base_station_address', 1))
 
             for sensor_id, sensor_config in current_config.get('sensors', {}).items():
                 current_config['sensors'][sensor_id]['enabled'] = f"enabled_{sensor_config['name']}" in request.form
@@ -161,12 +165,13 @@ def settings():
                 current_config['rain_gauge']['enabled'] = 'enabled_rain' in request.form
 
             save_config(current_config)
-            flash("Configuration saved successfully!", "success")
+            flash("Configuration saved successfully! Restart main script for some changes to take effect.", "success")
         except (ValueError, TypeError) as e:
             flash(f"Error saving configuration: Invalid input. ({e})", "danger")
         except Exception as e:
             flash(f"Error saving configuration: {e}", "danger")
         return redirect(url_for('settings'))
+    
     config = load_config()
     return render_template('settings.html', config=config)
 
