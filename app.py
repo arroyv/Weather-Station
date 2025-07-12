@@ -13,7 +13,7 @@ project_dir = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(project_dir, 'config.json')
 
 app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', 'a-secure-default-fallback-key-for-development')
+app.secret_key = os.getenv('SECRET_KEY', 'a-very-secret-key')
 config_lock = Lock()
 
 # --- Caching and DB Mapping ---
@@ -56,6 +56,7 @@ def get_enriched_data():
             station_db_map.clear()
             for db_file in all_db_files:
                 try:
+                    # Use a temporary DB manager to avoid holding connections
                     db_manager = DatabaseManager(db_file)
                     data = db_manager.get_latest_readings_by_station()
                     for station_id in data.keys():
@@ -65,34 +66,31 @@ def get_enriched_data():
                 except Exception as e:
                     print(f"[Dashboard] ERROR reading from {db_file}: {e}")
         
-        direction_map = { 0: "N", 1: "NE", 2: "E", 3: "SE", 4: "S", 5: "SW", 6: "W", 7: "NW" }
-
+        # Enrich data with labels and units from config
         for station_id, readings in latest_data_by_station.items():
             for key, reading in readings.items():
                 sensor_name = reading['sensor']
                 metric_name = reading['metric']
                 
-                reading_dict = dict(reading)
-                
-                if sensor_name == 'wind-direction' and metric_name == 'direction':
-                    reading_dict['display_value'] = direction_map.get(int(reading['value']), 'Unknown')
-                
+                # Find the label and unit from the config file
                 label, unit = key, ""
+                sensor_found = False
                 for s_conf in config.get('sensors', {}).values():
                     if s_conf['name'] == sensor_name:
                         metric_conf = s_conf.get('metrics', {}).get(metric_name)
                         if metric_conf:
                             label = metric_conf.get('label', key)
                             unit = metric_conf.get('unit', '')
+                        sensor_found = True
                         break
-                rg_conf = config.get('rain_gauge', {})
-                if rg_conf.get('name') == sensor_name:
-                     label = rg_conf.get('label', key)
-                     unit = rg_conf.get('unit', '')
+                if not sensor_found:
+                    rg_conf = config.get('rain_gauge', {})
+                    if rg_conf.get('name') == sensor_name:
+                         label = rg_conf.get('label', key)
+                         unit = rg_conf.get('unit', '')
                 
-                reading_dict['label'] = label
-                reading_dict['unit'] = unit
-                latest_data_by_station[station_id][key] = reading_dict
+                reading['label'] = label
+                reading['unit'] = unit
 
         cache['data'] = latest_data_by_station
         cache['last_updated'] = now
@@ -104,14 +102,25 @@ def get_history(station_id, sensor_key, hours):
         db_path = station_db_map.get(station_id)
 
     if not db_path:
-        return jsonify({"error": "Station not found"}), 404
+        return jsonify({"error": "Station database not found"}), 404
 
     try:
-        sensor, metric = sensor_key.split('-', 1)
+        # Correctly split the sensor key into sensor and metric parts
+        # This handles cases like 'wind-speed-ms' by splitting from the right
+        parts = sensor_key.rsplit('-', 1)
+        if len(parts) == 2:
+            sensor, metric = parts
+        else:
+            # Fallback for keys without a hyphen
+            sensor = sensor_key
+            metric = ""
+            
         db = DatabaseManager(db_path)
         historical_data = db.get_historical_data(station_id, sensor, metric, hours)
         db.close()
         return jsonify(historical_data)
+    except ValueError:
+         return jsonify({"error": "Invalid sensor key format. Expected 'sensor-metric'."}), 400
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -121,8 +130,9 @@ def dashboard():
     enriched_data = get_enriched_data()
     station_tabs = []
     local_station_id = config.get('station_info', {}).get('station_id')
-    sorted_station_ids = sorted(enriched_data.keys())
     
+    # Sort stations to have a consistent order, with local station first
+    sorted_station_ids = sorted(enriched_data.keys())
     if local_station_id in sorted_station_ids:
         sorted_station_ids.insert(0, sorted_station_ids.pop(sorted_station_ids.index(local_station_id)))
         
@@ -145,27 +155,35 @@ def settings():
     if request.method == 'POST':
         try:
             current_config = load_config()
+            # General Services
             current_config['services']['adafruit_io_enabled'] = 'adafruit_io_enabled' in request.form
             current_config['services']['lora_enabled'] = 'lora_enabled' in request.form
+            
+            # Station Info
             current_config['station_info']['station_name'] = request.form.get('station_name', 'default-name')
             
-            current_config['timing']['transmission_interval_seconds'] = max(1, request.form.get('transmission_interval_seconds', 60, type=int))
+            # Timing
+            current_config['timing']['transmission_interval_seconds'] = max(5, request.form.get('transmission_interval_seconds', 60, type=int))
             current_config['timing']['adafruit_io_interval_seconds'] = max(10, request.form.get('adafruit_io_interval_seconds', 300, type=int))
+            
+            # LoRa Config
             current_config['lora']['role'] = request.form.get('lora_role', 'base')
             current_config['lora']['frequency'] = float(request.form.get('lora_frequency', 915.0))
             current_config['lora']['tx_power'] = min(23, max(5, request.form.get('lora_tx_power', 23, type=int)))
             current_config['lora']['base_station_address'] = int(request.form.get('base_station_address', 1))
 
+            # Sensor Config
             for sensor_id, sensor_config in current_config.get('sensors', {}).items():
-                current_config['sensors'][sensor_id]['enabled'] = f"enabled_{sensor_config['name']}" in request.form
-                rate = request.form.get(f"polling_rate_{sensor_config['name']}", type=int)
-                current_config['sensors'][sensor_id]['polling_rate'] = max(1, rate) if rate is not None else 60
+                sensor_name = sensor_config['name']
+                current_config['sensors'][sensor_id]['enabled'] = f"enabled_{sensor_name}" in request.form
+                rate = request.form.get(f"polling_rate_{sensor_name}", 60, type=int)
+                current_config['sensors'][sensor_id]['polling_rate'] = max(10, rate)
             
             if 'rain_gauge' in current_config:
                 current_config['rain_gauge']['enabled'] = 'enabled_rain' in request.form
 
             save_config(current_config)
-            flash("Configuration saved successfully! Restart main script for some changes to take effect.", "success")
+            flash("Configuration saved successfully! A restart may be required for some changes to take effect.", "success")
         except (ValueError, TypeError) as e:
             flash(f"Error saving configuration: Invalid input. ({e})", "danger")
         except Exception as e:
@@ -176,4 +194,5 @@ def settings():
     return render_template('settings.html', config=config)
 
 if __name__ == '__main__':
+    # Use 0.0.0.0 to make it accessible on the network
     app.run(host='0.0.0.0', port=5000, debug=True)
