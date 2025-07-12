@@ -54,8 +54,6 @@ class DatabaseManager:
                     )
                 ''')
                 self.conn.commit()
-                # This message is very verbose, can be commented out if needed
-                # print("[Database] Tables created or already exist.")
             except sqlite3.Error as e:
                 print(f"[Database] ERROR: Could not create tables: {e}")
 
@@ -70,8 +68,6 @@ class DatabaseManager:
                     (ts, station_id, sensor, metric, value, rssi)
                 )
                 self.conn.commit()
-                # This message is very verbose, can be commented out if needed
-                # print("inserted tuple to db")
                 return cursor.lastrowid
             except sqlite3.Error as e:
                 print(f"[Database] ERROR: Failed to write reading: {e}")
