@@ -3,7 +3,7 @@ import time
 import json
 import os
 import datetime
-import msgpack # Import MessagePack
+import msgpack
 from threading import Thread, Event, Lock
 from Adafruit_IO import Client
 
@@ -13,7 +13,7 @@ import busio
 from digitalio import DigitalInOut
 import adafruit_rfm9x
 
-from database import DatabaseManager # Import DatabaseManager
+from database import DatabaseManager
 
 class BaseHandler(Thread):
     def __init__(self, config, db_manager):
@@ -47,7 +47,6 @@ class BaseHandler(Thread):
         raise NotImplementedError
 
 class AdafruitIOHandler(BaseHandler):
-    # ... (This class remains unchanged)
     def __init__(self, config, db_manager, aio_client, aio_prefix):
         self.aio_client = aio_client
         self.aio_prefix = aio_prefix
@@ -145,7 +144,6 @@ class LoRaHandler(BaseHandler):
 
     def update_interval(self):
         self.interval = self.config.get('timing', {}).get('transmission_interval_seconds', 60)
-        self.time_sync_interval = self.config.get('timing', {}).get('lora_time_sync_interval_seconds', 3600)
         self.lora_config = self.config.get('lora', {})
         self.role = self.lora_config.get('role')
 
@@ -166,16 +164,22 @@ class LoRaHandler(BaseHandler):
         records = self.db.get_unsent_lora_data(self.config['station_info']['station_id'], self.last_data_sent_id)
         if not records: return
         
+        # --- OPTIMIZATION: Remove redundant station_id from each record ---
+        payload_records = []
+        for r in records:
+            record_dict = dict(r)
+            del record_dict['station_id'] # Remove the key
+            payload_records.append(record_dict)
+
         packet = {
             'type': 'data',
             'station_name': self.config.get('station_info', {}).get('station_name', 'unknown'),
             'station_id': self.config.get('station_info', {}).get('station_id', 0),
-            'payload': [dict(r) for r in records]
+            'payload': payload_records # Use the optimized list
         }
 
         print(f"[{self.name}] Broadcasting {len(records)} data records.")
         with self.lora_lock:
-            # Use msgpack for a more compact binary payload
             packed_data = msgpack.packb(packet)
             self.rfm9x.send(packed_data)
         self.last_data_sent_id = records[-1]['id']
@@ -195,7 +199,6 @@ class LoRaHandler(BaseHandler):
 
             rssi = self.rfm9x.last_rssi
             try:
-                # Use msgpack to deserialize the binary data
                 data = msgpack.unpackb(packet)
                 packet_type = data.get('type')
                 
@@ -209,7 +212,7 @@ class LoRaHandler(BaseHandler):
 
     def handle_data_packet(self, data, rssi):
         station_name = data.get('station_name', 'unknown_station')
-        station_id = data.get('station_id')
+        station_id = data.get('station_id') # Get the single ID from the header
         payload = data.get('payload', [])
         
         if not payload or not station_id:
@@ -221,10 +224,12 @@ class LoRaHandler(BaseHandler):
         remote_db = self.get_remote_db(station_name)
         
         for record in payload:
+            # --- OPTIMIZATION: Use the station_id from the header for all records ---
             remote_db.write_reading(
-                station_id=record['station_id'],
+                station_id=station_id, # Use the main ID here
                 sensor=record['sensor'],
                 metric=record['metric'],
                 value=record['value'],
-                rssi=rssi
+                rssi=rssi,
+                timestamp=record['timestamp'] # Pass timestamp along
             )
