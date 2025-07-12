@@ -5,24 +5,19 @@ import datetime
 from threading import Lock
 
 class DatabaseManager:
-    """
-    Handles all interactions with the SQLite database.
-    This is the single source of truth for all weather data.
-    """
+    # ... (Most of the class remains the same)
     def __init__(self, db_path):
         self.db_path = db_path
         self._lock = Lock()
         self.conn = None
-        # Create directory if it doesn't exist, handling potential race conditions
         try:
             os.makedirs(os.path.dirname(db_path), exist_ok=True)
         except FileExistsError:
-            pass # Directory already exists, which is fine
+            pass
         self.connect()
         self.create_tables()
 
     def connect(self):
-        """Establishes a connection to the database."""
         try:
             self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
             self.conn.row_factory = sqlite3.Row
@@ -32,13 +27,11 @@ class DatabaseManager:
             raise
 
     def close(self):
-        """Closes the database connection."""
         if self.conn:
             self.conn.close()
             print(f"[Database] Closed connection to {self.db_path}")
 
     def create_tables(self):
-        """Creates the necessary tables if they don't already exist."""
         with self._lock:
             try:
                 cursor = self.conn.cursor()
@@ -58,7 +51,6 @@ class DatabaseManager:
                 print(f"[Database] ERROR: Could not create tables: {e}")
 
     def write_reading(self, station_id, sensor, metric, value, rssi=None, timestamp=None):
-        """Writes a single sensor reading to the database."""
         ts = timestamp if timestamp else datetime.datetime.now(datetime.timezone.utc).isoformat()
         with self._lock:
             try:
@@ -74,10 +66,6 @@ class DatabaseManager:
                 return None
 
     def get_latest_readings_by_station(self):
-        """
-        Retrieves the most recent reading for each sensor/metric for each station.
-        Returns a dictionary where keys are station_ids.
-        """
         with self._lock:
             try:
                 cursor = self.conn.cursor()
@@ -108,7 +96,6 @@ class DatabaseManager:
                 return {}
 
     def get_historical_data(self, station_id, hours):
-        """Retrieves historical data for a specific station and time window."""
         with self._lock:
             try:
                 cursor = self.conn.cursor()
@@ -123,9 +110,10 @@ class DatabaseManager:
                 print(f"[Database] ERROR: Could not fetch historical data: {e}")
                 return []
 
-    def get_unsent_lora_data(self, station_id, last_sent_id, limit=1):
+    def get_unsent_lora_data(self, station_id, last_sent_id, limit=4):
         """
         Retrieves a batch of data for this station that has not yet been sent via LoRa.
+        Increased limit to send more data per packet.
         """
         with self._lock:
             try:
