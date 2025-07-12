@@ -2,7 +2,7 @@
 import os
 import time
 import json
-import argparse # Import the argparse library
+import argparse
 from dotenv import load_dotenv
 from Adafruit_IO import Client
 from threading import Thread, Event
@@ -12,7 +12,6 @@ from database import DatabaseManager
 from handlers import AdafruitIOHandler, LoRaHandler
 
 def load_config(path='config.json'):
-    """Loads the configuration from a JSON file, creating it from template if it doesn't exist."""
     if not os.path.exists(path):
         print(f"[{__name__}] Config file not found. Creating from template...")
         template_path = path + '.template'
@@ -27,7 +26,6 @@ def load_config(path='config.json'):
         return json.load(f)
 
 def get_dynamic_db_path(config):
-    """Constructs the database path dynamically."""
     try:
         username = os.getlogin()
         db_config = config.get('database', {})
@@ -43,7 +41,6 @@ def get_dynamic_db_path(config):
         
         if not os.path.exists(os.path.dirname(path)):
             print(f"[Warning] Database directory not found: {os.path.dirname(path)}")
-            print("          Please ensure the USB drive is connected and has the correct label.")
             
         return path
     except Exception as e:
@@ -52,17 +49,13 @@ def get_dynamic_db_path(config):
         return f"{station_name}.db"
 
 def config_watcher_loop(config_path, weather_station, services, stop_event):
-    """
-    A central loop that watches for changes in the config file and tells
-    all other running services to reload their settings.
-    """
     from threading import Lock
     file_lock = Lock()
     
     with file_lock:
         last_mtime = os.path.getmtime(config_path)
 
-    while not stop_event.wait(10): # Check every 10 seconds
+    while not stop_event.wait(10):
         try:
             with file_lock:
                 mtime = os.path.getmtime(config_path)
@@ -77,33 +70,28 @@ def config_watcher_loop(config_path, weather_station, services, stop_event):
                     for service in services:
                         if hasattr(service, 'update_config'):
                             service.update_config(new_config)
-
         except OSError as e:
             print(f"[ConfigWatcher] ERROR: {e}")
 
 if __name__ == "__main__":
-    # --- Set up Command-Line Argument Parsing ---
     parser = argparse.ArgumentParser(description="Run the Weather Station application.")
     parser.add_argument('--name', type=str, help="The name of this station (overrides config file).")
     parser.add_argument('--role', type=str, choices=['base', 'remote'], help="The LoRa role for this station (overrides config file).")
-    # --- Add the new station ID argument ---
     parser.add_argument('--id', type=int, help="The unique ID of this station (overrides config file).")
     args = parser.parse_args()
 
     load_dotenv()
     config = load_config()
     
-    # --- Override config with command-line arguments if provided ---
     if args.name:
         config['station_info']['station_name'] = args.name
         print(f"[Startup] Overriding station name with command-line arg: {args.name}")
     if args.role:
         config['lora']['role'] = args.role
         print(f"[Startup] Overriding LoRa role with command-line arg: {args.role}")
-    if args.id is not None: # Check against None because ID can be 0
+    if args.id is not None:
         config['station_info']['station_id'] = args.id
         print(f"[Startup] Overriding station ID with command-line arg: {args.id}")
-
 
     station_id = config.get('station_info', {}).get('station_id')
     db_path = get_dynamic_db_path(config)
@@ -113,15 +101,11 @@ if __name__ == "__main__":
     print(f"  Station ID: {station_id}")
     print(f"  LoRa Role: {config['lora']['role']}")
 
+    db_manager = DatabaseManager(db_path, config)
 
-    # Initialize the Database Manager
-    db_manager = DatabaseManager(db_path)
-
-    # Initialize the Weather Station to collect data
     weather_station = WeatherStation(config, db_manager=db_manager)
     weather_station.discover_and_add_sensors()
     
-    # Initialize all enabled data handlers/services
     all_services = []
     services_config = config.get('services', {})
 
@@ -140,17 +124,13 @@ if __name__ == "__main__":
         lora_handler = LoRaHandler(config, db_manager)
         all_services.append(lora_handler)
 
-    # Create a shared stop event for graceful shutdown
     stop_event = Event()
 
     try:
-        # Start the main data collection service
         weather_station.start()
-        # Start all other data handling services
         for service in all_services:
             service.start()
         
-        # Start the central config watcher
         watcher_thread = Thread(target=config_watcher_loop, args=('config.json', weather_station, all_services, stop_event), daemon=True)
         watcher_thread.start()
             
