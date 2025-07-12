@@ -1,146 +1,146 @@
-# app.py
+# database.py
+import sqlite3
 import os
-import json
-import glob
-import time # Add time import
-from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
+import datetime
 from threading import Lock
-from database import DatabaseManager
-# --- 1. DRY PRINCIPLE: Import the function from the main script ---
-from run_weather_station import get_dynamic_db_path as get_local_db_path
 
-# --- Configuration ---
-project_dir = os.path.dirname(os.path.abspath(__file__))
-CONFIG_PATH = os.path.join(project_dir, 'config.json')
-
-app = Flask(__name__)
-# --- 2. SECURITY: Load secret key from environment variable ---
-app.secret_key = os.getenv('SECRET_KEY', 'a-secure-default-fallback-key-for-development')
-config_lock = Lock()
-
-# --- 3. PERFORMANCE: Caching for Dashboard ---
-cache = {
-    'data': None,
-    'last_updated': 0
-}
-CACHE_LIFETIME_SECONDS = 10 # Update every 10 seconds
-cache_lock = Lock()
-
-
-def load_config():
-    with config_lock:
-        with open(CONFIG_PATH, 'r') as f:
-            return json.load(f)
-
-def save_config(new_config):
-    with config_lock:
-        with open(CONFIG_PATH, 'w') as f:
-            json.dump(new_config, f, indent=2)
-
-def get_all_db_paths(local_db_path):
-    """Finds all .db files in the same directory as the local DB."""
-    db_dir = os.path.dirname(local_db_path)
-    return glob.glob(os.path.join(db_dir, '*.db'))
-
-def get_enriched_data():
-    """Gathers data from all available database files, using a cache."""
-    with cache_lock:
-        now = time.time()
-        # Check if cache is still valid
-        if cache['data'] and (now - cache['last_updated'] < CACHE_LIFETIME_SECONDS):
-            print("[Dashboard] Serving data from cache.")
-            return cache['data']
-
-        print("[Dashboard] Cache expired. Rebuilding data from databases.")
-        config = load_config()
-        local_db_path = get_local_db_path(config)
-        all_db_files = get_all_db_paths(local_db_path)
-        
-        latest_data_by_station = {}
-
-        for db_file in all_db_files:
-            try:
-                db_manager = DatabaseManager(db_file)
-                data = db_manager.get_latest_readings_by_station()
-                latest_data_by_station.update(data)
-                db_manager.close() # Close connection after reading
-            except Exception as e:
-                print(f"[Dashboard] ERROR reading from {db_file}: {e}")
-
-        for station_id, readings in latest_data_by_station.items():
-            for key, reading in readings.items():
-                sensor_name, metric_name = reading['sensor'], reading['metric']
-                label, unit = key, ""
-                if sensor_name == config.get('rain_gauge', {}).get('name'):
-                    label, unit = config['rain_gauge'].get('label', sensor_name), config['rain_gauge'].get('unit', '')
-                else:
-                    for s_conf in config.get('sensors', {}).values():
-                        if s_conf.get('name') == sensor_name:
-                            metric_conf = s_conf.get('metrics', {}).get(metric_name)
-                            if metric_conf: label, unit = metric_conf.get('label', key), metric_conf.get('unit', '')
-                            break
-                reading_dict = dict(reading); reading_dict['label'] = label; reading_dict['unit'] = unit
-                latest_data_by_station[station_id][key] = reading_dict
-        
-        # Update cache
-        cache['data'] = latest_data_by_station
-        cache['last_updated'] = now
-        return cache['data']
-
-@app.route('/')
-def dashboard():
-    config = load_config()
-    enriched_data = get_enriched_data()
-    station_tabs, local_station_id = [], config.get('station_info', {}).get('station_id')
-    sorted_station_ids = sorted(enriched_data.keys())
-    
-    if local_station_id in sorted_station_ids:
-        sorted_station_ids.insert(0, sorted_station_ids.pop(sorted_station_ids.index(local_station_id)))
-        
-    for station_id in sorted_station_ids:
-        station_tabs.append({
-            'id': station_id,
-            'name': f"Station {station_id}" + (" (Local)" if station_id == local_station_id else " (Remote)"),
-            'data': dict(sorted(enriched_data.get(station_id, {}).items()))
-        })
-        
-    return render_template('dashboard.html', station_name=config.get('station_info', {}).get('station_name', 'Unknown'), station_tabs=station_tabs)
-
-@app.route('/settings', methods=['GET', 'POST'])
-def settings():
-    if request.method == 'POST':
+class DatabaseManager:
+    """
+    Handles all interactions with the SQLite database.
+    This is the single source of truth for all weather data.
+    """
+    def __init__(self, db_path):
+        self.db_path = db_path
+        self._lock = Lock()
+        self.conn = None
+        # Create directory if it doesn't exist, handling potential race conditions
         try:
-            current_config = load_config()
-            current_config['services']['adafruit_io_enabled'] = 'adafruit_io_enabled' in request.form
-            current_config['services']['lora_enabled'] = 'lora_enabled' in request.form
-            current_config['station_info']['station_name'] = request.form.get('station_name', 'default-name')
-            
-            # --- 2. SECURITY: Add input validation ---
-            current_config['timing']['transmission_interval_seconds'] = max(1, request.form.get('transmission_interval_seconds', 60, type=int))
-            current_config['timing']['adafruit_io_interval_seconds'] = max(10, request.form.get('adafruit_io_interval_seconds', 300, type=int))
-            current_config['lora']['role'] = request.form.get('lora_role', 'base')
-            current_config['lora']['frequency'] = float(request.form.get('lora_frequency', 915.0))
-            current_config['lora']['tx_power'] = min(23, max(5, request.form.get('lora_tx_power', 23, type=int)))
+            os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        except FileExistsError:
+            pass # Directory already exists, which is fine
+        self.connect()
+        self.create_tables()
 
-            for sensor_id, sensor_config in current_config.get('sensors', {}).items():
-                current_config['sensors'][sensor_id]['enabled'] = f"enabled_{sensor_config['name']}" in request.form
-                rate = request.form.get(f"polling_rate_{sensor_config['name']}", type=int)
-                current_config['sensors'][sensor_id]['polling_rate'] = max(1, rate) if rate is not None else 60
-            
-            if 'rain_gauge' in current_config:
-                current_config['rain_gauge']['enabled'] = 'enabled_rain' in request.form
+    def connect(self):
+        """Establishes a connection to the database."""
+        try:
+            self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            self.conn.row_factory = sqlite3.Row
+            print(f"[Database] Connected to {self.db_path}")
+        except sqlite3.Error as e:
+            print(f"[Database] ERROR: Could not connect to database: {e}")
+            raise
 
-            save_config(current_config)
-            flash("Configuration saved successfully! Changes will be applied on the next cycle.", "success")
-        except (ValueError, TypeError) as e:
-            flash(f"Error saving configuration: Invalid input. Please check your values. ({e})", "danger")
-        except Exception as e:
-            flash(f"Error saving configuration: {e}", "danger")
-        return redirect(url_for('settings'))
-    config = load_config()
-    return render_template('settings.html', config=config)
+    def close(self):
+        """Closes the database connection."""
+        if self.conn:
+            self.conn.close()
+            print(f"[Database] Closed connection to {self.db_path}")
 
-if __name__ == '__main__':
-    print("--- Starting Weather Station Dashboard & API ---")
-    print(f"Access the dashboard at http://127.0.0.1:5000")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    def create_tables(self):
+        """Creates the necessary tables if they don't already exist."""
+        with self._lock:
+            try:
+                cursor = self.conn.cursor()
+                cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS readings (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        timestamp TEXT NOT NULL,
+                        station_id INTEGER NOT NULL,
+                        sensor TEXT NOT NULL,
+                        metric TEXT NOT NULL,
+                        value REAL NOT NULL,
+                        rssi REAL
+                    )
+                ''')
+                self.conn.commit()
+                # This message is very verbose, can be commented out if needed
+                # print("[Database] Tables created or already exist.")
+            except sqlite3.Error as e:
+                print(f"[Database] ERROR: Could not create tables: {e}")
+
+    def write_reading(self, station_id, sensor, metric, value, rssi=None, timestamp=None):
+        """Writes a single sensor reading to the database."""
+        ts = timestamp if timestamp else datetime.datetime.now(datetime.timezone.utc).isoformat()
+        with self._lock:
+            try:
+                cursor = self.conn.cursor()
+                cursor.execute(
+                    "INSERT INTO readings (timestamp, station_id, sensor, metric, value, rssi) VALUES (?, ?, ?, ?, ?, ?)",
+                    (ts, station_id, sensor, metric, value, rssi)
+                )
+                self.conn.commit()
+                # This message is very verbose, can be commented out if needed
+                # print("inserted tuple to db")
+                return cursor.lastrowid
+            except sqlite3.Error as e:
+                print(f"[Database] ERROR: Failed to write reading: {e}")
+                return None
+
+    def get_latest_readings_by_station(self):
+        """
+        Retrieves the most recent reading for each sensor/metric for each station.
+        Returns a dictionary where keys are station_ids.
+        """
+        with self._lock:
+            try:
+                cursor = self.conn.cursor()
+                query = """
+                    SELECT r.* FROM readings r
+                    INNER JOIN (
+                        SELECT station_id, sensor, metric, MAX(timestamp) AS max_ts
+                        FROM readings
+                        GROUP BY station_id, sensor, metric
+                    ) AS latest ON r.station_id = latest.station_id
+                               AND r.sensor = latest.sensor
+                               AND r.metric = latest.metric
+                               AND r.timestamp = latest.max_ts;
+                """
+                cursor.execute(query)
+                rows = cursor.fetchall()
+                
+                data_by_station = {}
+                for row in rows:
+                    station_id = row['station_id']
+                    if station_id not in data_by_station:
+                        data_by_station[station_id] = {}
+                    key = f"{row['sensor']}-{row['metric']}"
+                    data_by_station[station_id][key] = dict(row)
+                return data_by_station
+            except sqlite3.Error as e:
+                print(f"[Database] ERROR: Could not fetch latest readings: {e}")
+                return {}
+
+    def get_historical_data(self, station_id, hours):
+        """Retrieves historical data for a specific station and time window."""
+        with self._lock:
+            try:
+                cursor = self.conn.cursor()
+                query = """
+                    SELECT timestamp, sensor, metric, value FROM readings 
+                    WHERE station_id = ? AND timestamp >= datetime('now', '-' || ? || ' hours') 
+                    ORDER BY timestamp ASC
+                """
+                cursor.execute(query, (station_id, hours))
+                return cursor.fetchall()
+            except sqlite3.Error as e:
+                print(f"[Database] ERROR: Could not fetch historical data: {e}")
+                return []
+
+    def get_unsent_lora_data(self, station_id, last_sent_id, limit=1):
+        """
+        Retrieves a batch of data for this station that has not yet been sent via LoRa.
+        """
+        with self._lock:
+            try:
+                cursor = self.conn.cursor()
+                query = """
+                    SELECT id, timestamp, station_id, sensor, metric, value FROM readings
+                    WHERE station_id = ? AND id > ?
+                    ORDER BY id ASC LIMIT ?
+                """
+                cursor.execute(query, (station_id, last_sent_id, limit))
+                return cursor.fetchall()
+            except sqlite3.Error as e:
+                print(f"[Database] ERROR: Could not fetch unsent LoRa data: {e}")
+                return []

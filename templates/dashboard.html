@@ -2,246 +2,102 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Weather Station Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <meta http-equiv="refresh" content="30">
     <style>
-        /* Embedded styles for offline access */
-        * {
-            box-sizing: border-box;
-        }
-        body { 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; 
-            background: #f4f7f9; 
-            margin: 0; 
-            padding: 20px; 
-            color: #333; 
-        }
-        .navbar { 
-            background: #ffffff; 
-            padding: 10px 25px; 
-            border-radius: 12px; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05); 
-            margin-bottom: 30px; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center;
-            flex-wrap: wrap;
-        }
-        .navbar .nav-links a { 
-            text-decoration: none; 
-            color: #00796B; 
-            font-weight: 600; 
-            padding: 10px 18px; 
-            border-radius: 8px;
-            transition: background-color 0.2s ease-in-out;
-        }
-        .navbar a.brand { 
-            font-size: 1.6rem;
-            font-weight: 700;
-            color: #004D40;
-        }
-        .navbar .nav-links a:hover, .navbar .nav-links a.active { 
-            background-color: #e0f2f1; 
-        }
-        .container { 
-            max-width: 1600px; 
-            margin: 0 auto; 
-        }
-        h1 { 
-            font-weight: 700; 
-            font-size: 2.2rem; 
-            margin-top: 0; 
-            margin-bottom: 25px; 
-            color: #004D40; 
-            text-align: center; 
-        }
-        
-        /* Tabs */
-        .tab-nav { 
-            border-bottom: 2px solid #dee2e6; 
-            display: flex; 
-            margin-bottom: 25px; 
-            flex-wrap: wrap;
-        }
-        .tab-nav button { 
-            background: none; 
-            border: none; 
-            padding: 12px 22px; 
-            cursor: pointer; 
-            font-size: 1.1rem; 
-            font-weight: 600; 
-            color: #555; 
-            border-bottom: 4px solid transparent; 
-            margin-bottom: -2px;
-            transition: color 0.2s, border-color 0.2s;
-        }
-        .tab-nav button:hover {
-            color: #00796B;
-        }
-        .tab-nav button.active { 
-            color: #00796B; 
-            border-bottom-color: #00796B; 
-        }
-        .tab-content { 
-            display: none; 
-        }
-        .tab-content.active { 
-            display: block; 
-        }
-
-        .sensor-grid { 
-            display: grid; 
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); 
-            gap: 25px; 
-        }
-        .sensor-box { 
-            background-color: #fff; 
-            border-radius: 15px; 
-            padding: 25px; 
-            box-shadow: 0 5px 20px rgba(0,0,0,0.06); 
-            text-align: left; 
-            border: 1px solid #e9ecef;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-        .sensor-box:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 25px rgba(0,0,0,0.08);
-        }
-        .sensor-box .value-container {
-            display: flex;
-            align-items: baseline;
-            margin-bottom: 8px;
-        }
-        .sensor-box .value { 
-            font-size: 2.8rem; 
-            font-weight: 700; 
-            color: #212529; 
-        }
-        .sensor-box .unit { 
-            font-size: 1.5rem; 
-            font-weight: 500; 
-            color: #6c757d; 
-            margin-left: 8px; 
-        }
-        .sensor-box .label { 
-            font-size: 1.1rem; 
-            font-weight: 600; 
-            color: #495057; 
-            margin-bottom: 12px; 
-            display: block; 
-        }
-        .sensor-box .timestamp { 
-            font-size: 0.8rem; 
-            color: #6c757d; 
-            display: block; 
-        }
-        .sensor-box .badge { 
-            display: inline-block; 
-            padding: 4px 10px; 
-            border-radius: 12px; 
-            background-color: #e9ecef; 
-            color: #495057; 
-            font-size: 0.8rem; 
-            font-weight: 600;
-            margin-top: 10px; 
-        }
-
-        /* --- Responsive Design for Tablets and Phones --- */
-        @media (max-width: 768px) {
-            body {
-                padding: 15px;
-            }
-            .navbar {
-                flex-direction: column;
-                gap: 10px;
-            }
-            .tab-nav button {
-                font-size: 1rem;
-                padding: 10px 15px;
-            }
-            h1 {
-                font-size: 1.8rem;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .sensor-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-
+        body { background-color: #f8f9fa; }
+        .metric-card { border-left-width: 5px; }
+        .metric-value { font-size: 2rem; font-weight: bold; }
+        .metric-label { font-size: 1rem; color: #6c757d; }
     </style>
 </head>
 <body>
-    <nav class="navbar">
-        <a href="/" class="brand">{{ station_name }}</a>
-        <div class="nav-links">
-            <a href="{{ url_for('dashboard') }}" class="active">Dashboard</a>
-            <a href="{{ url_for('settings') }}">Settings</a>
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1>Dashboard</h1>
+            <a href="/settings" class="btn btn-secondary">Settings</a>
         </div>
-    </nav>
-
-    <div class="container">
-        <div class="tab-nav">
-            {% for tab in station_tabs %}
-            <button class="tab-button" onclick="openTab(event, 'station-{{ tab.id }}')" {% if loop.first %}id="defaultOpen"{% endif %}>
-                {{ tab.name }}
-            </button>
+        
+        <ul class="nav nav-tabs" id="stationTab" role="tablist">
+            {% for station in station_tabs %}
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="station-{{ station.id }}-tab" data-bs-toggle="tab" data-bs-target="#station-{{ station.id }}" type="button" role="tab">{{ station.name }}</button>
+            </li>
             {% endfor %}
-        </div>
+        </ul>
 
-        {% for tab in station_tabs %}
-        <div id="station-{{ tab.id }}" class="tab-content">
-            <h1>Live Readings</h1>
-            <div class="sensor-grid">
-                {% if tab.data %}
-                    {% for key, reading in tab.data.items() %}
-                    <div class="sensor-box">
-                        <div class="value-container">
-                            <span class="value">{{ '%.2f'|format(reading.value) }}</span>
-                            <span class="unit">{{ reading.unit }}</span>
+        <div class="tab-content" id="stationTabContent">
+            {% for station in station_tabs %}
+            <div class="tab-pane fade" id="station-{{ station.id }}" role="tabpanel">
+                <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-4 py-4">
+                    {% for key, reading in station.data.items() %}
+                    <div class="col">
+                        <div class="card h-100 shadow-sm metric-card">
+                            <div class="card-body">
+                                <div class="metric-value">{{ '%.2f'|format(reading.value) }}</div>
+                                <div class="metric-label">{{ reading.label }} ({{ reading.unit }})</div>
+                            </div>
+                            <div class="card-footer text-muted" style="font-size: 0.8rem;">
+                                Updated: {{ reading.timestamp.split('T')[1].split('.')[0] }}
+                            </div>
                         </div>
-                        <span class="label">{{ reading.label }}</span>
-                        <span class="timestamp">Updated: {{ reading.timestamp.replace("T", " ")[:19] }} UTC</span>
-                        {% if reading.rssi %}
-                            <span class="badge">RSSI: {{ reading.rssi }}</span>
-                        {% endif %}
+                    </div>
+                    {% else %}
+                    <div class="col-12">
+                        <p class="text-center text-muted">No data available for this station.</p>
                     </div>
                     {% endfor %}
-                {% else %}
-                    <p>No data received yet for this station.</p>
-                {% endif %}
+                </div>
             </div>
+            {% endfor %}
         </div>
-        {% endfor %}
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        function openTab(evt, tabName) {
-            const tabContents = document.getElementsByClassName("tab-content");
-            for (let i = 0; i < tabContents.length; i++) {
-                tabContents[i].style.display = "none";
-            }
-            const tabButtons = document.getElementsByClassName("tab-button");
-            for (let i = 0; i < tabButtons.length; i++) {
-                tabButtons[i].className = tabButtons[i].className.replace(" active", "");
-            }
-            document.getElementById(tabName).style.display = "block";
-            evt.currentTarget.className += " active";
-        }
+        document.addEventListener('DOMContentLoaded', function () {
+            const stationTab = document.getElementById('stationTab');
+            const tabButtons = stationTab.querySelectorAll('.nav-link');
+            const tabContentPanes = document.querySelectorAll('.tab-pane');
+            const lastTabKey = 'lastActiveStationTab';
 
-        // Initialize default tab
-        document.addEventListener('DOMContentLoaded', (event) => {
-            const defaultTabButton = document.getElementById("defaultOpen");
-            if (defaultTabButton) {
-                defaultTabButton.click();
+            // Function to activate a tab
+            function activateTab(tabButton) {
+                if (!tabButton) return;
+                
+                // Deactivate all others
+                tabButtons.forEach(btn => btn.classList.remove('active'));
+                tabContentPanes.forEach(pane => {
+                    pane.classList.remove('show', 'active');
+                });
+                
+                // Activate the correct one
+                tabButton.classList.add('active');
+                const targetPane = document.querySelector(tabButton.dataset.bsTarget);
+                if (targetPane) {
+                    targetPane.classList.add('show', 'active');
+                }
             }
+
+            // Store the ID of the clicked tab
+            stationTab.addEventListener('click', function (event) {
+                if (event.target.classList.contains('nav-link')) {
+                    localStorage.setItem(lastTabKey, event.target.id);
+                }
+            });
+
+            // On page load, try to activate the last selected tab
+            const lastTabId = localStorage.getItem(lastTabKey);
+            let tabToActivate = document.getElementById(lastTabId);
+
+            // If last selected tab doesn't exist or isn't found, default to the first tab
+            if (!tabToActivate) {
+                tabToActivate = tabButtons[0];
+            }
+            
+            activateTab(tabToActivate);
         });
-
-        // Refresh the page every 60 seconds to get new data
-        setTimeout(() => {
-            window.location.reload();
-        }, 2000);
     </script>
 </body>
 </html>
