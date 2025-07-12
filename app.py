@@ -58,7 +58,6 @@ def get_enriched_data():
                 except Exception as e:
                     print(f"[Dashboard] ERROR reading from {db_file}: {e}")
         
-        # --- Wind Direction Text Conversion ---
         direction_map = { 0: "N", 1: "NE", 2: "E", 3: "SE", 4: "S", 5: "SW", 6: "W", 7: "NW" }
 
         for station_id, readings in latest_data_by_station.items():
@@ -124,19 +123,52 @@ def dashboard():
         sorted_station_ids.insert(0, sorted_station_ids.pop(sorted_station_ids.index(local_station_id)))
         
     for station_id in sorted_station_ids:
+        # Look up the database name using the map
+        db_path = station_db_map.get(station_id, "Unknown DB")
+        db_name = os.path.basename(db_path)
+        is_local = (station_id == local_station_id)
+
         station_tabs.append({
             'id': station_id,
-            'name': f"Station {station_id}" + (" (Local)" if station_id == local_station_id else " (Remote)"),
+            'db_name': db_name,
+            'is_local': is_local,
             'data': dict(sorted(enriched_data.get(station_id, {}).items()))
         })
         
     return render_template('dashboard.html', station_tabs=station_tabs)
 
-# The /settings route remains the same...
 @app.route('/settings', methods=['GET', 'POST'])
 def settings():
-    # ...
-    return render_template('settings.html', config=load_config())
+    if request.method == 'POST':
+        try:
+            current_config = load_config()
+            current_config['services']['adafruit_io_enabled'] = 'adafruit_io_enabled' in request.form
+            current_config['services']['lora_enabled'] = 'lora_enabled' in request.form
+            current_config['station_info']['station_name'] = request.form.get('station_name', 'default-name')
+            
+            current_config['timing']['transmission_interval_seconds'] = max(1, request.form.get('transmission_interval_seconds', 60, type=int))
+            current_config['timing']['adafruit_io_interval_seconds'] = max(10, request.form.get('adafruit_io_interval_seconds', 300, type=int))
+            current_config['lora']['role'] = request.form.get('lora_role', 'base')
+            current_config['lora']['frequency'] = float(request.form.get('lora_frequency', 915.0))
+            current_config['lora']['tx_power'] = min(23, max(5, request.form.get('lora_tx_power', 23, type=int)))
+
+            for sensor_id, sensor_config in current_config.get('sensors', {}).items():
+                current_config['sensors'][sensor_id]['enabled'] = f"enabled_{sensor_config['name']}" in request.form
+                rate = request.form.get(f"polling_rate_{sensor_config['name']}", type=int)
+                current_config['sensors'][sensor_id]['polling_rate'] = max(1, rate) if rate is not None else 60
+            
+            if 'rain_gauge' in current_config:
+                current_config['rain_gauge']['enabled'] = 'enabled_rain' in request.form
+
+            save_config(current_config)
+            flash("Configuration saved successfully! Changes will be applied on the next cycle.", "success")
+        except (ValueError, TypeError) as e:
+            flash(f"Error saving configuration: Invalid input. Please check your values. ({e})", "danger")
+        except Exception as e:
+            flash(f"Error saving configuration: {e}", "danger")
+        return redirect(url_for('settings'))
+    config = load_config()
+    return render_template('settings.html', config=config)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
