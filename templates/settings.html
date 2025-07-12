@@ -2,153 +2,136 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Station Settings</title>
+    <title>Weather Station Settings</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        * { box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background: #f4f7f9; margin: 0; padding: 20px; color: #333; }
-        .navbar { background: #ffffff; padding: 10px 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
-        .navbar .nav-links a { text-decoration: none; color: #00796B; font-weight: 600; padding: 10px 18px; border-radius: 8px; transition: background-color 0.2s ease-in-out; }
-        .navbar a.brand { font-size: 1.6rem; font-weight: 700; color: #004D40; }
-        .navbar .nav-links a:hover, .navbar .nav-links a.active { background-color: #e0f2f1; }
-        .container { max-width: 800px; margin: 0 auto; }
-        h2 { font-weight: 700; font-size: 2rem; margin-bottom: 10px; color: #004D40; text-align: center; }
-        .description { text-align: center; margin-bottom: 30px; color: #6c757d; font-size: 1.1rem; }
-        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 5px 20px rgba(0,0,0,0.06); margin-bottom: 30px; border: 1px solid #e9ecef; }
-        .card h5 { font-size: 1.4rem; color: #004D40; margin-top: 0; margin-bottom: 25px; border-bottom: 2px solid #e0e0e0; padding-bottom: 15px; }
-        .form-group { margin-bottom: 25px; }
-        .form-group label { display: block; font-weight: 600; margin-bottom: 10px; color: #495057; }
-        .form-group input[type="text"], .form-group input[type="number"], .form-group input[type="float"], .form-group select { width: 100%; padding: 12px; border: 1px solid #ced4da; border-radius: 8px; box-sizing: border-box; font-size: 1rem; transition: border-color 0.2s, box-shadow 0.2s; }
-        .form-group input:focus, .form-group select:focus { border-color: #00796B; box-shadow: 0 0 0 3px rgba(0, 121, 107, 0.15); outline: none; }
-        .form-group .form-text { font-size: 0.9rem; color: #6c757d; margin-top: 8px; }
-        .form-switch { display: flex; align-items: center; margin-bottom: 15px; }
-        .form-switch input { opacity: 0; width: 0; height: 0; }
-        .switch-label { margin-left: 12px; cursor: pointer; font-weight: 600; }
-        .switch-track { position: relative; height: 26px; width: 50px; background: #ced4da; border-radius: 13px; cursor: pointer; transition: background-color 0.2s ease-in-out; }
-        .switch-thumb { position: absolute; height: 22px; width: 22px; top: 2px; left: 2px; background: white; border-radius: 50%; transition: transform 0.2s ease-in-out; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
-        .form-switch input:checked + .switch-track { background: #00796B; }
-        .form-switch input:checked + .switch-track .switch-thumb { transform: translateX(24px); }
-        .btn { padding: 10px 20px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: background-color 0.2s, transform 0.1s; }
-        .btn:active { transform: translateY(1px); }
-        .btn-primary { background-color: #00796B; color: white; display: block; width: 100%; padding: 15px; font-size: 1.1rem; }
-        .btn-primary:hover { background-color: #00695C; }
-        .btn-secondary { background-color: #6c757d; color: white; }
-        .btn-secondary:hover { background-color: #5a6268; }
-        .alert { padding: 15px; margin-bottom: 20px; border-radius: 8px; border: 1px solid transparent; font-weight: 600; }
-        .alert-success { color: #0f5132; background-color: #d1e7dd; border-color: #badbcc; }
-        .alert-danger { color: #842029; background-color: #f8d7da; border-color: #f5c2c7; }
-        .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; }
-        @media (max-width: 768px) {
-            body { padding: 15px; }
-            .navbar { flex-direction: column; gap: 10px; }
-            .settings-grid { grid-template-columns: 1fr; }
-            .card { padding: 20px; }
-            h2 { font-size: 1.8rem; }
+        body {
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 960px;
+        }
+        .card-header {
+            font-weight: bold;
+        }
+        .form-check-label {
+            margin-left: 0.5rem;
         }
     </style>
 </head>
 <body>
-    <nav class="navbar">
-        <a href="/" class="brand">{{ config.station_info.station_name }}</a>
-        <div class="nav-links">
-            <a href="{{ url_for('dashboard') }}">Dashboard</a>
-            <a href="{{ url_for('settings') }}" class="active">Settings</a>
-        </div>
-    </nav>
-
-    <div class="container">
-        <h2>Station Settings</h2>
-        <p class="description">Configure station behavior. Changes are applied automatically.</p>
+    <div class="container mt-5">
+        <h1>Settings</h1>
+        <p>Configure your weather station. Changes will be automatically reloaded by the running services.</p>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                <div class="alert alert-{{ category }}">{{ message }}</div>
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
 
-        <form method="POST" action="{{ url_for('settings') }}">
-            <div class="card">
-                <h5>General</h5>
-                <div class="form-group">
-                    <label for="station_name">Station Name</label>
-                    <input type="text" id="station_name" name="station_name" value="{{ config.station_info.station_name }}">
+        <form method="POST">
+            <div class="card mb-4">
+                <div class="card-header">General Settings</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="station_name" class="form-label">Station Name</label>
+                        <input type="text" class="form-control" id="station_name" name="station_name" value="{{ config.station_info.station_name }}">
+                    </div>
                 </div>
             </div>
 
-            <div class="card">
-                <h5>LoRa Configuration</h5>
-                <div class="settings-grid">
-                    <div class="form-group">
-                        <label for="lora_role">Role</label>
-                        <select id="lora_role" name="lora_role">
-                            <option value="base" {% if config.lora.role == 'base' %}selected{% endif %}>Base</option>
-                            <option value="remote" {% if config.lora.role == 'remote' %}selected{% endif %}>Remote</option>
+            <div class="card mb-4">
+                <div class="card-header">Services</div>
+                <div class="card-body">
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="adafruit_io_enabled" name="adafruit_io_enabled" {% if config.services.adafruit_io_enabled %}checked{% endif %}>
+                        <label class="form-check-label" for="adafruit_io_enabled">Enable Adafruit IO</label>
+                    </div>
+                    <div class="mb-3">
+                        <label for="adafruit_io_interval_seconds" class="form-label">Adafruit IO Upload Interval (seconds)</label>
+                        <input type="number" class="form-control" id="adafruit_io_interval_seconds" name="adafruit_io_interval_seconds" value="{{ config.timing.adafruit_io_interval_seconds }}">
+                    </div>
+                    <hr>
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="lora_enabled" name="lora_enabled" {% if config.services.lora_enabled %}checked{% endif %}>
+                        <label class="form-check-label" for="lora_enabled">Enable LoRa</label>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">LoRa Radio Settings</div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="lora_role" class="form-label">LoRa Role</label>
+                        <select class="form-select" id="lora_role" name="lora_role">
+                            <option value="base" {% if config.lora.role == 'base' %}selected{% endif %}>Base Station</option>
+                            <option value="remote" {% if config.lora.role == 'remote' %}selected{% endif %}>Remote Node</option>
                         </select>
                     </div>
-                    <div class="form-group">
-                        <label for="lora_frequency">Frequency (MHz)</label>
-                        <input type="float" id="lora_frequency" name="lora_frequency" value="{{ config.lora.frequency }}">
+                    <div class="mb-3">
+                        <label for="transmission_interval_seconds" class="form-label">LoRa Transmission Interval (seconds)</label>
+                        <input type="number" class="form-control" id="transmission_interval_seconds" name="transmission_interval_seconds" value="{{ config.timing.transmission_interval_seconds }}">
                     </div>
-                     <div class="form-group">
-                        <label for="lora_tx_power">TX Power (5-23)</label>
-                        <input type="number" id="lora_tx_power" name="lora_tx_power" value="{{ config.lora.tx_power }}">
-                    </div>
-                    <div class="form-group">
-                        <label for="lora_local_address">Local Address</label>
-                        <input type="number" id="lora_local_address" name="lora_local_address" value="{{ config.lora.local_address }}">
-                    </div>
-                    <div class="form-group">
-                        <label for="lora_remote_address">Remote Address</label>
-                        <input type="number" id="lora_remote_address" name="lora_remote_address" value="{{ config.lora.remote_address }}">
-                    </div>
-                </div>
-            </div>
-            
-            <div class="card">
-                <h5>Local Sensor Polling (This Station in Sec)</h5>
-                <div style="margin-bottom: 20px; display: flex; gap: 10px;">
-                    <button type="button" class="btn btn-secondary" onclick="toggleAllSensors(true, 'local')">Enable All</button>
-                    <button type="button" class="btn btn-secondary" onclick="toggleAllSensors(false, 'local')">Disable All</button>
-                </div>
-                <div class="settings-grid">
-                    {% for sensor_id, sensor_config in config.sensors.items() %}
-                    <div class="form-group">
-                        <div class="form-switch">
-                            <input type="checkbox" class="sensor-toggle-local" id="enabled_{{ sensor_config.name }}" name="enabled_{{ sensor_config.name }}" {% if sensor_config.enabled %}checked{% endif %}>
-                            <label for="enabled_{{ sensor_config.name }}" class="switch-track"><span class="switch-thumb"></span></label>
-                            <label for="enabled_{{ sensor_config.name }}" class="switch-label text-capitalize">{{ sensor_config.name }}</label>
+                     <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="lora_local_address" class="form-label">Local Address</label>
+                            <input type="number" class="form-control" id="lora_local_address" name="lora_local_address" value="{{ config.lora.local_address }}">
                         </div>
-                        <input type="number" id="polling_rate_{{ sensor_config.name }}" name="polling_rate_{{ sensor_config.name }}" value="{{ sensor_config.polling_rate }}">
+                        <div class="col-md-6 mb-3">
+                            <label for="lora_remote_address" class="form-label">Remote Address</label>
+                            <input type="number" class="form-control" id="lora_remote_address" name="lora_remote_address" value="{{ config.lora.remote_address }}">
+                        </div>
                     </div>
+                    <div class="row">
+                         <div class="col-md-6 mb-3">
+                            <label for="lora_frequency" class="form-label">Frequency (MHz)</label>
+                            <input type="number" step="0.1" class="form-control" id="lora_frequency" name="lora_frequency" value="{{ config.lora.frequency }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="lora_tx_power" class="form-label">TX Power (dBm)</label>
+                            <input type="number" class="form-control" id="lora_tx_power" name="lora_tx_power" value="{{ config.lora.tx_power }}">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header">Local Sensor Polling</div>
+                <div class="card-body">
+                    {% for sensor_id, sensor_config in config.sensors.items() %}
+                        <div class="mb-3 p-2 border rounded">
+                            <h5>{{ sensor_config.label | default(sensor_config.name) }}</h5>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="enabled_{{ sensor_config.name }}" name="enabled_{{ sensor_config.name }}" {% if sensor_config.enabled %}checked{% endif %}>
+                                <label class="form-check-label" for="enabled_{{ sensor_config.name }}">Enable</label>
+                            </div>
+                            <label for="polling_rate_{{ sensor_config.name }}" class="form-label mt-2">Polling Rate (seconds)</label>
+                            <input type="number" class="form-control" id="polling_rate_{{ sensor_config.name }}" name="polling_rate_{{ sensor_config.name }}" value="{{ sensor_config.polling_rate }}">
+                        </div>
                     {% endfor %}
+
+                    {% if config.rain_gauge %}
+                     <div class="mb-3 p-2 border rounded">
+                            <h5>{{ config.rain_gauge.label | default(config.rain_gauge.name) }}</h5>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="enabled_rain" name="enabled_rain" {% if config.rain_gauge.enabled %}checked{% endif %}>
+                                <label class="form-check-label" for="enabled_rain">Enable</label>
+                            </div>
+                        </div>
+                     {% endif %}
                 </div>
             </div>
 
-            <!-- NEW: Remote Config Section -->
-            <div class="card">
-                <h5>Remote Sensor Polling (Pushed via LoRa (in Sec))</h5>
-                <div class="settings-grid">
-                {% for sensor_id, sensor_config in config.remote_config_payload.sensors.items() %}
-                    <div class="form-group">
-                        <label for="remote_polling_rate_{{ sensor_id }}" class="text-capitalize">{{ config.sensors[sensor_id].name }}</label>
-                        <input type="number" id="remote_polling_rate_{{ sensor_id }}" name="remote_polling_rate_{{ sensor_id }}" value="{{ sensor_config.polling_rate }}">
-                    </div>
-                {% endfor %}
-                </div>
-            </div>
-
-            <button type="submit" class="btn btn-primary">Save All Settings</button>
+            <button type="submit" class="btn btn-primary mb-5">Save Settings</button>
         </form>
     </div>
-    <script>
-        function toggleAllSensors(enable, type) {
-            const checkboxes = document.querySelectorAll(`.sensor-toggle-${type}`);
-            checkboxes.forEach(cb => {
-                cb.checked = enable;
-            });
-        }
-    </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
