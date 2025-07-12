@@ -121,8 +121,8 @@ class LoRaHandler(BaseHandler):
             self.rfm9x = adafruit_rfm9x.RFM9x(spi, CS, RESET, self.lora_config.get('frequency', 915.0))
             self.rfm9x.enable_crc = True
             self.rfm9x.ack_retries = self.lora_config.get('ack_retries', 3)
+            self.rfm9x.ack_delay = self.lora_config.get('ack_delay', 0.2)
             self.rfm9x.ack_timeout = self.lora_config.get('ack_timeout', 2.0)
-            self.rfm9x.ack_delay = self.lora_config.get('ack_delay', 1.0)
             self.rfm9x.tx_power = self.lora_config.get('tx_power', 23)
             # Addressing is removed for broadcast mode
             # print(f"[{self.name}] RFM9x LoRa radio initialized in BROADCAST mode.")
@@ -181,11 +181,7 @@ class LoRaHandler(BaseHandler):
         records = self.db.get_unsent_lora_data(self.config['station_info']['station_id'], self.last_data_sent_id)
         if not records: return
 
-        print(f"[{self.name}] Broadcasting {len(records)} data records.")
-        # with self.lora_lock:
-        #     for record in records:
-        #         self.rfm9x.send(json.dumps(record).encode("utf-8"))
-        # self.last_data_sent_id = records[-1]['id']
+        print(f"[{self.name}] Attempting to send {len(records)} data records.")
         with self.lora_lock:
             for record in records:
                 packet = {
@@ -200,15 +196,6 @@ class LoRaHandler(BaseHandler):
                     success = self.rfm9x.send_with_ack(message)
                     # # Stop for a while then send the next packet
                     # time.sleep(self.lora_config.get('ack_delay', 1.0))
-
-                    # Wait for the ack from receiving side for ack_timeout seconds with retries = ack_retries
-                    # for _ in range(self.rfm9x.ack_retries):
-                    #     ack = self.rfm9x.receive(timeout=self.rfm9x.ack_timeout)
-                    #     if ack and ack == b'ACK':
-                    #         success = True
-                    #         break
-                    # else:
-                    #     success = False
                 except Exception as e:
                     print(f"[{self.name}] ERROR: Failed to send message: {e}")
                 if success:
@@ -218,7 +205,7 @@ class LoRaHandler(BaseHandler):
             print(f"[{self.name}] Sent to id {self.last_data_sent_id}.")
 
     def receive_loop(self):
-        if not self.rfm9x: return
+        if not self.rfm9x or self.role != 'base': return
         print(f"[{self.name}] Starting receive loop.")
         while not self._stop_event.is_set():
             if not self.config.get('services', {}).get('lora_enabled', False):
