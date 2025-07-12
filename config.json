@@ -8,18 +8,23 @@
     "lora_enabled": true
   },
   "timing": {
-    "transmission_interval_seconds": 10,
+    "transmission_interval_seconds": 30,
     "adafruit_io_interval_seconds": 300,
     "lora_time_sync_interval_seconds": 3600
   },
   "database": {
     "drive_label": "WSS"
   },
-  "lora": {
+"lora": {
     "role": "base",
     "device": "/dev/ttyS0",
     "frequency": 915.0,
-    "tx_power": 23
+    "tx_power": 23,
+    "local_address": 1,
+    "remote_address": 2,
+    "ack_retries": 3,
+    "ack_delay": 0.2,
+    "ack_timeout": 2.0
   },
   "sensors": {
     "1": {
@@ -49,7 +54,7 @@
           },
           "feed_key": "soil-temp-c",
           "label": "Soil Temperature",
-          "unit": "\u00c2\u00b0C"
+          "unit": "C"
         }
       }
     },
@@ -79,7 +84,7 @@
           },
           "feed_key": "atmosphere-temp-c",
           "label": "Air Temperature",
-          "unit": "\u00c2\u00b0C"
+          "unit": "C"
         }
       }
     },
@@ -136,8 +141,8 @@
           "signed": true,
           "correction": {},
           "feed_key": "pressure-temp-c",
-          "label": "Baro Temperature",
-          "unit": "\u00c2\u00b0C"
+          "label": "Temperature",
+          "unit": "C"
         }
       }
     },
@@ -152,7 +157,7 @@
           "correction": {},
           "feed_key": "wind-direction",
           "label": "Wind Direction",
-          "unit": "\u00c2\u00b0"
+          "unit": ""
         }
       }
     },

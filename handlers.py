@@ -20,7 +20,6 @@ class BaseHandler(Thread):
         self.db = db_manager
         self._stop_event = Event()
         self.name = self.__class__.__name__
-        self.interval = 300
         self.update_config(config)
 
     def run(self):
@@ -46,7 +45,7 @@ class BaseHandler(Thread):
         raise NotImplementedError
 
 class AdafruitIOHandler(BaseHandler):
-    # This class remains the same
+    # This class is unchanged
     pass
 
 class LoRaHandler(BaseHandler):
@@ -76,7 +75,18 @@ class LoRaHandler(BaseHandler):
             spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
             self.rfm9x = adafruit_rfm9x.RFM9x(spi, CS, RESET, self.lora_config.get('frequency', 915.0))
             self.rfm9x.tx_power = self.lora_config.get('tx_power', 23)
-            print(f"[{self.name}] RFM9x LoRa radio initialized in BROADCAST mode.")
+            
+            # --- MERGED: Configure radio for reliable, acknowledged delivery ---
+            self.rfm9x.enable_crc = True
+            self.rfm9x.ack_retries = self.lora_config.get('ack_retries', 3)
+            self.rfm9x.ack_delay = self.lora_config.get('ack_delay', 0.2)
+            self.rfm9x.ack_timeout = self.lora_config.get('ack_timeout', 2.0)
+            
+            # --- MERGED: Re-introduce addressing needed for ACKs ---
+            self.rfm9x.node = self.lora_config.get('local_address', 1 if self.role == 'base' else 2)
+            self.rfm9x.destination = self.lora_config.get('remote_address', 2 if self.role == 'base' else 1)
+            
+            print(f"[{self.name}] RFM9x LoRa radio initialized. Node {self.rfm9x.node} -> Dest {self.rfm9x.destination}")
         except (ValueError, RuntimeError) as e:
             print(f"[{self.name}] ERROR: RFM9x radio not found or failed to initialize: {e}")
             self.rfm9x = None
@@ -85,7 +95,6 @@ class LoRaHandler(BaseHandler):
         if station_name in self.db_connections:
             return self.db_connections[station_name]
         
-        print(f"[{self.name}] Creating new database connection for remote station: {station_name}")
         main_db_path = self.db_connections['local'].db_path
         base_dir = os.path.dirname(main_db_path)
         remote_db_path = os.path.join(base_dir, f"{station_name}.db")
@@ -95,7 +104,6 @@ class LoRaHandler(BaseHandler):
         return db_manager
 
     def close(self):
-        print(f"[{self.name}] Closing all database connections.")
         for name, db_conn in self.db_connections.items():
             if name != 'local':
                 db_conn.close()
@@ -131,15 +139,21 @@ class LoRaHandler(BaseHandler):
             'payload': payload
         }
 
-        print(f"[{self.name}] Broadcasting snapshot ID {snapshot['id']}.")
         with self.lora_lock:
             packed_data = msgpack.packb(packet)
             if len(packed_data) > 252:
                 print(f"ERROR: Packet size ({len(packed_data)}) exceeds LoRa limit of 252 bytes.")
                 return
-            self.rfm9x.send(packed_data)
-        
-        self.last_data_sent_id = snapshot['id']
+            
+            # --- MERGED: Use send_with_ack for reliable delivery ---
+            print(f"[{self.name}] Sending snapshot ID {snapshot['id']} with ACK...")
+            success = self.rfm9x.send_with_ack(packed_data)
+            
+            if success:
+                print(f"[{self.name}] ACK received for snapshot ID {snapshot['id']}.")
+                self.last_data_sent_id = snapshot['id']
+            else:
+                print(f"[{self.name}] No ACK received for snapshot ID {snapshot['id']}.")
 
     def receive_loop(self):
         if not self.rfm9x: return
@@ -149,9 +163,8 @@ class LoRaHandler(BaseHandler):
                 time.sleep(5)
                 continue
             
-            with self.lora_lock:
-                packet = self.rfm9x.receive(timeout=5.0)
-            
+            # --- MERGED: Listen for packets and automatically send ACKs ---
+            packet = self.rfm9x.receive(timeout=5.0, with_ack=True)
             if not packet: continue
 
             rssi = self.rfm9x.last_rssi
