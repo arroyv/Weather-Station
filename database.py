@@ -13,7 +13,11 @@ class DatabaseManager:
         self.db_path = db_path
         self._lock = Lock()
         self.conn = None
-        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        # Create directory if it doesn't exist, handling potential race conditions
+        try:
+            os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        except FileExistsError:
+            pass # Directory already exists, which is fine
         self.connect()
         self.create_tables()
 
@@ -26,6 +30,12 @@ class DatabaseManager:
         except sqlite3.Error as e:
             print(f"[Database] ERROR: Could not connect to database: {e}")
             raise
+
+    def close(self):
+        """Closes the database connection."""
+        if self.conn:
+            self.conn.close()
+            print(f"[Database] Closed connection to {self.db_path}")
 
     def create_tables(self):
         """Creates the necessary tables if they don't already exist."""
@@ -44,7 +54,8 @@ class DatabaseManager:
                     )
                 ''')
                 self.conn.commit()
-                print("[Database] Tables created or already exist.")
+                # This message is very verbose, can be commented out if needed
+                # print("[Database] Tables created or already exist.")
             except sqlite3.Error as e:
                 print(f"[Database] ERROR: Could not create tables: {e}")
 
@@ -59,7 +70,8 @@ class DatabaseManager:
                     (ts, station_id, sensor, metric, value, rssi)
                 )
                 self.conn.commit()
-                print("inserted tuple to db")
+                # This message is very verbose, can be commented out if needed
+                # print("inserted tuple to db")
                 return cursor.lastrowid
             except sqlite3.Error as e:
                 print(f"[Database] ERROR: Failed to write reading: {e}")
