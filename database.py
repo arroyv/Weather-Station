@@ -5,20 +5,29 @@ import datetime
 from threading import Lock
 
 class DatabaseManager:
+    """
+    Handles all interactions with the SQLite database, including creating tables,
+    writing readings, and fetching data. It is thread-safe.
+    """
     def __init__(self, db_path):
         self.db_path = db_path
         self._lock = Lock()
         self.conn = None
         try:
+            # Ensure the directory for the database exists
             os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        except FileExistsError:
+        except (FileExistsError, FileNotFoundError):
+            # The directory might already exist, or we might be in the root dir
             pass
         self.connect()
         self.create_tables()
 
     def connect(self):
+        """Establishes a connection to the SQLite database file."""
         try:
+            # `check_same_thread=False` is important for multi-threaded access
             self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            # Use the Row factory to access columns by name
             self.conn.row_factory = sqlite3.Row
             print(f"[Database] Connected to {self.db_path}")
         except sqlite3.Error as e:
@@ -26,10 +35,13 @@ class DatabaseManager:
             raise
 
     def close(self):
+        """Closes the database connection."""
         if self.conn:
             self.conn.close()
+            print(f"[Database] Disconnected from {self.db_path}")
 
     def create_tables(self):
+        """Creates the necessary tables if they don't already exist."""
         with self._lock:
             try:
                 cursor = self.conn.cursor()
@@ -49,6 +61,7 @@ class DatabaseManager:
                 print(f"[Database] ERROR: Could not create tables: {e}")
 
     def write_reading(self, station_id, sensor, metric, value, rssi=None, timestamp=None):
+        """Writes a single sensor reading to the database."""
         ts = timestamp if timestamp else datetime.datetime.now(datetime.timezone.utc).isoformat()
         with self._lock:
             try:
@@ -64,9 +77,15 @@ class DatabaseManager:
                 return None
 
     def get_latest_readings_by_station(self):
+        """
+        Retrieves the most recent reading for each sensor/metric combination,
+        grouped by station ID.
+        """
         with self._lock:
             try:
                 cursor = self.conn.cursor()
+                # This query efficiently gets the full row for the latest timestamp
+                # for each unique combination of station, sensor, and metric.
                 query = """
                     SELECT r.* FROM readings r
                     INNER JOIN (
@@ -85,6 +104,7 @@ class DatabaseManager:
                     station_id = row['station_id']
                     if station_id not in data_by_station:
                         data_by_station[station_id] = {}
+                    # Create a unique key for the dashboard (e.g., 'soil-temp-c')
                     key = f"{row['sensor']}-{row['metric']}"
                     data_by_station[station_id][key] = dict(row)
                 return data_by_station
@@ -92,33 +112,36 @@ class DatabaseManager:
                 print(f"[Database] ERROR: Could not fetch latest readings: {e}")
                 return {}
 
-    def get_historical_data(self, station_id, hours, metric_column):
-        # This method needs to be adapted for the "long" format.
-        # The metric_column is now a combination of sensor and metric.
-        sensor_name, metric_name = metric_column.split('_', 1)
-        metric_name = metric_name.replace('_', '-')
-        
+    def get_historical_data(self, station_id, sensor, metric, hours):
+        """
+        Retrieves historical data for a specific sensor and metric over a
+        given number of hours.
+        """
         with self._lock:
             try:
                 cursor = self.conn.cursor()
+                # Query for data within the specified time window
                 query = """
                     SELECT timestamp, value FROM readings 
                     WHERE station_id = ? AND sensor = ? AND metric = ? AND timestamp >= datetime('now', '-' || ? || ' hours') 
                     ORDER BY timestamp ASC
                 """
-                cursor.execute(query, (station_id, sensor_name, metric_name, hours))
+                cursor.execute(query, (station_id, sensor, metric, hours))
                 return [dict(row) for row in cursor.fetchall()]
             except sqlite3.Error as e:
                 print(f"[Database] ERROR: Could not fetch historical data: {e}")
                 return []
 
-    def get_unsent_lora_data(self, station_id, last_sent_id, limit=20):
+    def get_unsent_lora_data(self, station_id, last_sent_id, limit=10):
+        """
+        Retrieves a batch of readings that have not yet been sent via LoRa.
+        """
         with self._lock:
             try:
                 cursor = self.conn.cursor()
                 query = "SELECT * FROM readings WHERE station_id = ? AND id > ? ORDER BY id ASC LIMIT ?"
                 cursor.execute(query, (station_id, last_sent_id, limit))
-                return cursor.fetchall()
+                return [dict(row) for row in cursor.fetchall()]
             except sqlite3.Error as e:
                 print(f"[Database] ERROR: Could not fetch unsent LoRa data: {e}")
                 return []
