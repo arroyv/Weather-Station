@@ -101,6 +101,7 @@ class LoRaHandler(BaseHandler):
         super().__init__(config, db_manager)
 
         self.init_lora_hardware()
+        self.last_data_received_id = 0
 
         if self.rfm9x:
             print(f"[{self.name}] Initialized in '{self.role}' role.")
@@ -120,6 +121,7 @@ class LoRaHandler(BaseHandler):
             self.rfm9x = adafruit_rfm9x.RFM9x(spi, CS, RESET, self.lora_config.get('frequency', 915.0))
             self.rfm9x.enable_crc = True
             self.rfm9x.ack_retries = self.lora_config.get('ack_retries', 3)
+            self.rfm9x.ack_timeout = self.lora_config.get('ack_timeout', 2.0)
             self.rfm9x.ack_delay = self.lora_config.get('ack_delay', 1.0)
             self.rfm9x.tx_power = self.lora_config.get('tx_power', 23)
             # Addressing is removed for broadcast mode
@@ -179,13 +181,6 @@ class LoRaHandler(BaseHandler):
         records = self.db.get_unsent_lora_data(self.config['station_info']['station_id'], self.last_data_sent_id)
         if not records: return
 
-        packet = {
-            'type': 'data',
-            'station_name': self.config.get('station_info', {}).get('station_name', 'unknown'),
-            'station_id': self.config.get('station_info', {}).get('station_id', 0),
-            'payload': [dict(r) for r in records]
-        }
-
         print(f"[{self.name}] Broadcasting {len(records)} data records.")
         # with self.lora_lock:
         #     for record in records:
@@ -202,8 +197,17 @@ class LoRaHandler(BaseHandler):
                 message = json.dumps(packet).encode("utf-8")
                 try:
                     success = self.rfm9x.send(message)
-                    # Stop for a while then send the next packet
-                    time.sleep(self.lora_config.get('ack_delay', 1.0))
+                    # # Stop for a while then send the next packet
+                    # time.sleep(self.lora_config.get('ack_delay', 1.0))
+
+                    # Wait for the ack from receiving side for ack_timeout seconds with retries = ack_retries
+                    for _ in range(self.rfm9x.ack_retries):
+                        ack = self.rfm9x.receive(timeout=self.rfm9x.ack_timeout)
+                        if ack and ack == b'ACK':
+                            success = True
+                            break
+                    else:
+                        success = False
                 except Exception as e:
                     print(f"[{self.name}] ERROR: Failed to send message: {e}")
                 if success:
@@ -232,7 +236,10 @@ class LoRaHandler(BaseHandler):
 
                 # We only care about data packets in the base station role
                 if self.role == 'base' and packet_type == 'data':
-                    self.handle_data_packet(data, rssi)
+                    id = self.handle_data_packet(data, rssi)
+                    if id != -1 and id == self.last_data_received_id + 1:
+                        self.last_data_received_id = id
+                        self.send(b'ACK')
 
             except (json.JSONDecodeError, AttributeError):
                 print(f"[{self.name}] ERROR: Malformed LoRa packet received.")
@@ -246,7 +253,7 @@ class LoRaHandler(BaseHandler):
 
         if not payload or not station_id:
             print(f"[{self.name}] Received data packet with no payload or station_id.")
-            return
+            return -1
 
         # Get the specific database for this remote station
         remote_db = self.get_remote_db(station_name)
