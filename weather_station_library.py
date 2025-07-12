@@ -48,16 +48,16 @@ class WeatherStation:
         config = self.config
         ports_to_scan = [
             # USB to Serial Converters
-            '/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyUSB2', '/dev/ttyUSB3',
+            # '/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyUSB2', '/dev/ttyUSB3',
             '/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyACM2', '/dev/ttyACM3',
 
             # On-board Hardware UARTs
-            '/dev/ttyS0',
-            '/dev/ttyAMA0', '/dev/ttyAMA1', '/dev/ttyAMA2', '/dev/ttyAMA3', '/dev/ttyAMA4',
+            # '/dev/ttyS0',
+            # '/dev/ttyAMA0', '/dev/ttyAMA1', '/dev/ttyAMA2', '/dev/ttyAMA3', '/dev/ttyAMA4',
 
             # Symbolic Links
-            '/dev/serial0',
-            '/dev/serial1'
+            # '/dev/serial0',
+            # '/dev/serial1'/
         ]
         
         print(f"  [Discovery] Performing initial discovery of Modbus sensors...")
