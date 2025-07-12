@@ -1,4 +1,5 @@
 # run_weather_station.py
+import argparse
 import os
 import time
 import json
@@ -21,21 +22,21 @@ def get_dynamic_db_path(config):
         username = os.getlogin()
         db_config = config.get('database', {})
         drive_label = db_config.get('drive_label')
-        
+
         # Get station name and create the DB filename from it
         station_name = config.get('station_info', {}).get('station_name', 'default-station')
         db_filename = f"{station_name}.db"
-        
+
         if not drive_label:
             raise ValueError("Database 'drive_label' not specified in config.")
-            
+
         path = os.path.join('/media', username, drive_label, db_filename)
-        
+
         # Check if the mount point exists
         if not os.path.exists(os.path.dirname(path)):
             print(f"[Warning] Database directory not found: {os.path.dirname(path)}")
             print("          Please ensure the USB drive is connected and has the correct label.")
-            
+
         return path
     except Exception as e:
         print(f"[Error] Could not determine database path: {e}")
@@ -50,7 +51,7 @@ def config_watcher_loop(config_path, weather_station, services, stop_event):
     """
     from threading import Lock
     file_lock = Lock()
-    
+
     with file_lock:
         last_mtime = os.path.getmtime(config_path)
 
@@ -61,12 +62,12 @@ def config_watcher_loop(config_path, weather_station, services, stop_event):
                 if mtime > last_mtime:
                     print("\n[ConfigWatcher] Detected config file change. Reloading all services...")
                     last_mtime = mtime
-                    
+
                     new_config = load_config(config_path)
-                    
+
                     # Note: Does not update the database path on the fly. Requires restart.
                     weather_station.update_config(new_config)
-                    
+
                     for service in services:
                         if hasattr(service, 'update_config'):
                             service.update_config(new_config)
@@ -75,9 +76,23 @@ def config_watcher_loop(config_path, weather_station, services, stop_event):
             print(f"[ConfigWatcher] ERROR: {e}")
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run the Weather Station application.")
+    parser.add_argument('--name', type=str, help="The name of this station (overrides config file).")
+    parser.add_argument('--role', type=str, choices=['base', 'remote'], help="The LoRa role for this station (overrides config file).")
+    parser.add_argument('--id', type=int, help="The unique ID of this station (overrides config file).")
+    args = parser.parse_args()
+
     load_dotenv()
     config = load_config()
-    
+
+    # Override config values with command line arguments if provided
+    if args.name:
+        config['station_info']['station_name'] = args.name
+    if args.role:
+        config['lora']['role'] = args.role
+    if args.id is not None:
+        config['station_info']['station_id'] = args.id
+
     station_id = config.get('station_info', {}).get('station_id', 0)
     db_path = get_dynamic_db_path(config)
 
@@ -90,7 +105,7 @@ if __name__ == "__main__":
     # 2. Initialize the Weather Station to collect data
     weather_station = WeatherStation(config, db_manager=db_manager)
     weather_station.discover_and_add_sensors()
-    
+
     # 3. Initialize all enabled data handlers/services
     all_services = []
     services_config = config.get('services', {})
@@ -119,15 +134,15 @@ if __name__ == "__main__":
         # Start all other data handling services
         for service in all_services:
             service.start()
-        
+
         # Start the central config watcher
         watcher_thread = Thread(target=config_watcher_loop, args=('config.json', weather_station, all_services, stop_event), daemon=True)
         watcher_thread.start()
-            
+
         print("\n--- All Services are Running --- (Press Ctrl+C to stop)")
         while True:
             time.sleep(1)
-            
+
     except KeyboardInterrupt:
         print("\nShutting down gracefully...")
         stop_event.set()

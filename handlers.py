@@ -196,18 +196,19 @@ class LoRaHandler(BaseHandler):
                 }
                 message = json.dumps(packet).encode("utf-8")
                 try:
-                    success = self.rfm9x.send(message)
+                    # success = self.rfm9x.send(message)
+                    success = self.rfm9x.send_with_ack(message)
                     # # Stop for a while then send the next packet
                     # time.sleep(self.lora_config.get('ack_delay', 1.0))
 
                     # Wait for the ack from receiving side for ack_timeout seconds with retries = ack_retries
-                    for _ in range(self.rfm9x.ack_retries):
-                        ack = self.rfm9x.receive(timeout=self.rfm9x.ack_timeout)
-                        if ack and ack == b'ACK':
-                            success = True
-                            break
-                    else:
-                        success = False
+                    # for _ in range(self.rfm9x.ack_retries):
+                    #     ack = self.rfm9x.receive(timeout=self.rfm9x.ack_timeout)
+                    #     if ack and ack == b'ACK':
+                    #         success = True
+                    #         break
+                    # else:
+                    #     success = False
                 except Exception as e:
                     print(f"[{self.name}] ERROR: Failed to send message: {e}")
                 if success:
@@ -225,21 +226,21 @@ class LoRaHandler(BaseHandler):
                 continue
 
             with self.lora_lock:
-                packet = self.rfm9x.receive(timeout=5.0, with_header=True, with_ack=True)
+                packet = self.rfm9x.receive(timeout=5.0, with_ack=True)
 
             if not packet: continue
 
             rssi = self.rfm9x.last_rssi
             try:
-                data = json.loads(packet[4:].decode())
+                data = json.loads(packet.decode())
                 packet_type = data.get('type')
 
                 # We only care about data packets in the base station role
                 if self.role == 'base' and packet_type == 'data':
                     id = self.handle_data_packet(data, rssi)
-                    if id != -1 and id == self.last_data_received_id + 1:
-                        self.last_data_received_id = id
-                        self.send(b'ACK')
+                    # if id != -1 and id == self.last_data_received_id + 1:
+                    #     self.last_data_received_id = id
+                    #     self.send(b'ACK')
 
             except (json.JSONDecodeError, AttributeError):
                 print(f"[{self.name}] ERROR: Malformed LoRa packet received.")
