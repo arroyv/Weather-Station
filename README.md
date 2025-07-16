@@ -1,117 +1,88 @@
 # Weather-Station
 
-## Overview
+This project provides a comprehensive, Raspberry Pi-based weather station platform for collecting, storing, transmitting, and visualizing environmental data from various sensors. It is designed to be modular and highly configurable for different deployment scenarios, such as in a greenhouse or an open field.
 
-This project enables monitoring of environmental conditions using a Raspberry Pi 5 connected to MODBUS sensors via a USB-to-4CH RS485 interface. The system collects data such as temperature, humidity, CO2 levels, wind direction, and speed, and then logs it to Adafruit IO or prints it to the terminal.
+---
 
-## Hardware Requirements
+### ## Key Features
 
-- **Raspberry Pi 5**
-- **USB-to-4CH RS485 Interface** (utilizes `/dev/ttyAMA` ports for MODBUS communication)
-- **MODBUS-compatible sensors**:
-  - Atmospheric pressure and temperature
-  - Atmospheric temperature and humidity
-  - CO2 concentration
-  - Light intensity
-  - Wind direction and speed
-- **Power Supply**: Ensure sensors are powered as per manufacturer specifications.
-- External DC Power Supply (~10–30 V)
+-   [cite_start]**Multi-Sensor Support:** Interfaces with Modbus sensors (for metrics like temperature, humidity, CO2, pressure, wind) and GPIO-based sensors (for rain gauges)[cite: 90, 192].
+-   [cite_start]**Wireless Communication:** Built-in LoRa support allows for robust, long-range data transmission between a central base station and multiple remote sensor nodes[cite: 372].
+-   [cite_start]**Web Dashboard:** A built-in Flask web server provides a real-time dashboard to view data from all stations in the network and a settings page to manage the station's configuration[cite: 271, 310].
+-   [cite_start]**Cloud Integration:** Automatically uploads the latest sensor data to Adafruit IO for historical logging, graphing, and remote monitoring[cite: 351, 359].
+-   [cite_start]**Resilient and Dynamic:** The system runs multiple processes in parallel using threading[cite: 137, 347, 380]. [cite_start]It also supports live configuration updates without requiring a restart.
+-   [cite_start]**Local Data Storage:** All readings are stored in a local SQLite database, ensuring no data is lost if network connectivity fails[cite: 424, 444].
 
-## Software Requirements
+---
 
-- **Python**: Ensure Python 3 is installed.
-- **MinimalModbus Library**: For MODBUS communication.
-- **Adafruit IO Python Library**: For cloud-based logging.
+### ## Installation
 
-### Environment Setup
+#### **Prerequisites**
+-   A Raspberry Pi (3, 4, or 5 recommended).
+-   Python 3 and `git`.
+-   Required hardware: USB-to-RS485 adapter, LoRa module (RFM9x), and sensors.
 
-1. **Create and Activate Python Virtual Environment**
-   ```bash
-   sudo apt update
-   sudo apt install python3-venv -y
-   python3 -m venv weather_station_env
-   source weather_station_env/bin/activate
+#### **Setup Instructions**
 
-2. **Install Required Libraries**
-   ```bash
-   pip install minimalmodbus Adafruit_IO
+1.  **Grant Hardware Access:**
+    Add your user to the `dialout` and `gpio` groups to access serial and GPIO pins. **You must log out and back in** for this to apply.
+    ```bash
+    sudo usermod -a -G dialout,gpio $USER
+    ```
 
-## Code Details
+2.  **Clone the Repository:**
+    ```bash
+    git clone <your-repository-url>
+    cd weather-station
+    ```
 
-### 1. Main Components
+3.  **Create and Activate a Python Virtual Environment:**
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate
+    ```
 
-- **weather_station.py**: Contains the base `Sensor` class and specialized classes for each sensor type (e.g., `AtmosphericPressureSensor`, `CO2Sensor`).
-- **run_weather_station.py**: Discovers connected sensors and manages their data collection and logging.
-- **Individual sensor scripts**:  
-  - `atmospheric.py` (pressure and temperature)  
-  - `atmospheric_T_H.py` (humidity and temperature)  
-  - `CO2.py` (CO2 concentration)  
-  - `light.py` (light intensity)  
-  - `Wind_direction.py` (wind direction)  
-  - `Wspeed.py` (wind speed)  
+4.  **Install Required Libraries:**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-### 2. Key Features
+5.  **Set Up Environment Variables:**
+    [cite_start]If using Adafruit IO, create a `.env` file and add your credentials[cite: 330].
+    ```
+    # .env
+    ADAFRUIT_IO_USERNAME="your_aio_username"
+    ADAFRUIT_IO_KEY="your_aio_key"
+    ```
 
-- Configurable polling rates and logging to Adafruit IO.
-- Shared port locking for multiple sensors.
-- Support for `/dev/ttyAMA` ports on Raspberry Pi 5.
+6.  **Configure the Station:**
+    Open `config.json` and customize it for your needs. At a minimum, you should:
+    -   Set a unique `station_id` and `station_name`.
+    -   Set the LoRa `role` to `"base"` or `"remote"`.
+    -   Enable your specific sensors and services (`lora_enabled`, `adafruit_io_enabled`).
 
-## Running the Code
+---
 
-### Running Individual Sensor Scripts
+### ## Usage
 
-1. Edit the serial port in each script to match the connected device (e.g., `/dev/ttyAMA0`):
-   
-   ```bash
-   python atmospheric.py
+1.  **Start the Application:**
+    Run the main script from the project's root directory.
+    ```bash
+    python run_weather_station.py
+    ```
+    You can override settings from `config.json` with command-line arguments:
+    ```bash
+    # Example: Start a remote station with ID 10
+    python run_weather_station.py --role remote --id 10
+    ```
 
-**Output example:**
-- Atmospheric Pressure: 101.5 Kpa  
-- Temperature: 25.0 °C
+2.  **Access the Web Dashboard:**
+    Open a browser and go to `http://<your_pi_ip_address>:5000`.
 
-**Running the Weather Station**
-1. Update Adafruit IO credentials in `run_weather_station.py`:
-   ```python
-   ADAFRUIT_IO_USERNAME = "your_username"
-   ADAFRUIT_IO_KEY = "your_key"
+---
 
-# Instructions
+### ## Troubleshooting
 
-## Setup
-
-1. **Connect all sensors** and run the script:
-   ```bash
-   python run_weather_station.py
-
-The script discovers connected sensors and starts collecting and logging data.
-
-## Troubleshooting
-
-### No Response from Sensors
-- Check the serial port and MODBUS address in the script.
-- Verify power connections.
-
-### Permission Errors
-- Add the current user to the dialout group:
-  ```bash
-  sudo usermod -a -G dialout $USER
-
-## Data Errors
-
-- Validate register addresses and MODBUS parameters in the sensor documentation.
-- Use debugging flags (`debug=True`) for detailed logs.
-
-## MODBUS Communication
-
-To achieve MODBUS communication between the Raspberry Pi and the weather sensor, use the following library:
-
-- [MinimalModbus](https://minimalmodbus.readthedocs.io/en/stable/readme.html)
-
-## Additional Documentation
-
-Further documentation can be found at:
-
-- [Weather Sensors Datasheets/Documentation](https://drive.google.com/drive/u/1/folders/1Py-3WYEePmtlyG_yQctw7KpAPdwBNnvp)
-
-*If you cannot access this link, please request access from:  
-**coordinator_uw@avelaccess.org**.*
+-   **Permission Errors:** Ensure you have run the `usermod` command and have logged out and back in.
+-   **No Sensor Data:** Double-check your sensor wiring (Power, Ground, RS485 A/B lines) and verify that the Modbus addresses in `config.json` match the physical addresses of your sensors.
+-   **Web App Not Loading:** Make sure the script is running and that your Raspberry Pi is connected to the same network as your computer.
