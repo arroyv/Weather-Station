@@ -36,7 +36,9 @@ class WeatherStation:
             return
 
         config = self.config
-        ports_to_scan = ['/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyACM2', '/dev/ttyACM3', '/dev/ttyACM4', '/dev/ttyACM5', '/dev/ttyACM6', '/dev/ttyACM7', '/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyUSB2', '/dev/ttyUSB3', '/dev/ttyUSB4', '/dev/ttyUSB5', '/dev/ttyUSB6', '/dev/ttyUSB7']
+        ports_to_scan = ['/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyACM2', '/dev/ttyACM3', '/dev/ttyACM4', '/dev/ttyACM5', '/dev/ttyACM6', '/dev/ttyACM7', '/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyUSB2',
+                         '/dev/ttyUSB3', '/dev/ttyUSB4', '/dev/ttyUSB5', '/dev/ttyUSB6', '/dev/ttyUSB7', '/dev/ttyCH9344USB0', '/dev/ttyCH9344USB1', '/dev/ttyCH9344USB2', '/dev/ttyCH9344USB3',
+                         '/dev/ttyCH9344USB4', '/dev/ttyCH9344USB5', '/dev/ttyCH9344USB6', '/dev/ttyCH9344USB7']
         
         print("  [Discovery] Performing initial discovery of Modbus sensors...")
         found_addrs = {}
