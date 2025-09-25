@@ -159,9 +159,11 @@ def do_install():
         enable = input("\nEnable services to run on boot? (y/n) [y]: ").lower() or 'y'
         if enable == 'y':
             do_enable()
-            start = input("Start services now? (y/n) [y]: ").lower() or 'y'
+            start = input("Reboot now to start services? (y/n) [y]: ").lower() or 'y'
+            # start = input("Start services now? (y/n) [y]: ").lower() or 'y'
             if start == 'y':
-                do_start()
+                do_reboot()
+                # do_start()
     except (EOFError, KeyboardInterrupt):
         print("\nSkipping enable/start.")
 
@@ -205,6 +207,11 @@ def do_disable():
         print("Disabling weather-dashboard.service...")
         run_command(['systemctl', 'disable', '--now', 'weather-dashboard.service'], as_root=False)
 
+def do_reboot():
+    """Reboot the system after enabling services."""
+    check_root()
+    run_command(['sudo', 'reboot'], as_root=True)
+
 def do_start():
     """Starts the services."""
     check_root()
@@ -243,6 +250,7 @@ if __name__ == "__main__":
     start       - Start the services now.
     stop        - Stop the services now.
     status      - Check the current status of the services.
+    reboot      - Reboot the system for services to start.
     """)
 
     args = parser.parse_args()
@@ -256,6 +264,7 @@ if __name__ == "__main__":
         'start': do_start,
         'stop': do_stop,
         'status': do_status,
+        'reboot': do_reboot,
     }
     
     # Execute the function corresponding to the command
