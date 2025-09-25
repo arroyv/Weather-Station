@@ -15,15 +15,17 @@ GUNICORN_EXEC = os.path.join(os.path.dirname(PYTHON_EXEC), 'gunicorn')
 WEATHER_STATION_SERVICE_TPL = """
 [Unit]
 Description=Weather Station Data Collector (%(name)s)
-After=network-online.target
+StartLimitIntervalSec=0
 
 [Service]
 User=%(user)s
 Group=%(user)s
 WorkingDirectory=%(path)s
+TimeoutStartSec=0
+ExecStartPre=/bin/sleep 90
 ExecStart=%(python_exec)s %(path)s/run_weather_station.py --name "%(name)s" --id %(id)s --role %(role)s
 Restart=always
-RestartSec=10s
+RestartSec=90s
 
 [Install]
 WantedBy=multi-user.target

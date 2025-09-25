@@ -1,6 +1,7 @@
 # weather_station_library.py
 import os
 import time
+import logging
 from threading import Thread, Event, Lock
 
 # Import hardware-specific libraries
@@ -41,6 +42,8 @@ class WeatherStation:
                          '/dev/ttyCH9344USB4', '/dev/ttyCH9344USB5', '/dev/ttyCH9344USB6', '/dev/ttyCH9344USB7']
         
         print("  [Discovery] Performing initial discovery of Modbus sensors...")
+        logging.basicConfig(level=logging.INFO)
+        logging.info("Sensor discovery has started.")
         found_addrs = {}
         for addr_str, s_conf in config.get('sensors', {}).items():
             if not s_conf.get('enabled', False):
