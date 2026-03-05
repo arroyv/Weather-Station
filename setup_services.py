@@ -15,17 +15,16 @@ GUNICORN_EXEC = os.path.join(os.path.dirname(PYTHON_EXEC), 'gunicorn')
 WEATHER_STATION_SERVICE_TPL = """
 [Unit]
 Description=Weather Station Data Collector (%(name)s)
+After=network-online.target
 StartLimitIntervalSec=0
 
 [Service]
 User=%(user)s
 Group=%(user)s
 WorkingDirectory=%(path)s
-TimeoutStartSec=0
-ExecStartPre=/bin/sleep 90
 ExecStart=%(python_exec)s %(path)s/run_weather_station.py --name "%(name)s" --id %(id)s --role %(role)s
 Restart=always
-RestartSec=90s
+RestartSec=10s
 
 [Install]
 WantedBy=multi-user.target
@@ -159,11 +158,9 @@ def do_install():
         enable = input("\nEnable services to run on boot? (y/n) [y]: ").lower() or 'y'
         if enable == 'y':
             do_enable()
-            start = input("Reboot now to start services? (y/n) [y]: ").lower() or 'y'
-            # start = input("Start services now? (y/n) [y]: ").lower() or 'y'
+            start = input("Start services now? (y/n) [y]: ").lower() or 'y'
             if start == 'y':
-                do_reboot()
-                # do_start()
+                do_start()
     except (EOFError, KeyboardInterrupt):
         print("\nSkipping enable/start.")
 
