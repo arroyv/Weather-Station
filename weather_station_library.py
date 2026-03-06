@@ -108,17 +108,21 @@ class WeatherStation:
                     print(f"[Config Update] Warning: No config found for running sensor '{sensor.name}'. It may become disabled.")
 
 
-    def _test_sensor_at_location(self, port, address):
+    def _test_sensor_at_location(self, port, address, retries=3, delay=2):
         """Tests for the presence of a Modbus device at a specific port and address."""
-        try:
-            with self.shared_modbus_lock:
-                inst = minimalmodbus.Instrument(port, address)
-                inst.serial.baudrate = 4800
-                inst.serial.timeout = 1.0
-                inst.read_register(0, 0) # Try reading a common register
-            return True
-        except (IOError, ValueError):
-            return False
+        for attempt in range(retries):
+            try:
+                with self.shared_modbus_lock:
+                    inst = minimalmodbus.Instrument(port, address)
+                    inst.serial.baudrate = 4800
+                    inst.serial.timeout = 1.0
+                    inst.read_register(0, 0) # Try reading a common register
+                    inst.serial.close()
+                return True
+            except (IOError, ValueError):
+                if attempt < retries - 1:
+                    time.sleep(delay)
+        return False
 
 class ModbusSensor:
     """
