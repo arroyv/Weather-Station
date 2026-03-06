@@ -15,6 +15,7 @@ GUNICORN_EXEC = os.path.join(os.path.dirname(PYTHON_EXEC), 'gunicorn')
 WEATHER_STATION_SERVICE_TPL = """
 [Unit]
 Description=Weather Station Data Collector (%(name)s)
+Wants=network-online.target
 After=network-online.target
 StartLimitIntervalSec=0
 
@@ -33,6 +34,7 @@ WantedBy=multi-user.target
 DASHBOARD_SERVICE_TPL = """
 [Unit]
 Description=Weather Station Dashboard
+Wants=network-online.target
 After=network-online.target
 
 [Service]

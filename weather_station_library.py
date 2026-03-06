@@ -71,7 +71,7 @@ class WeatherStation:
                 time.sleep(attempt_delay)
 
         if not found_addrs and enabled_sensors:
-            print("  [Discovery] WARNING: No Modbus sensors were found after all attempts.")
+            raise RuntimeError("[Discovery] No Modbus sensors were found after all attempts. Exiting so systemd can restart the service.")
 
         for addr, port in found_addrs.items():
             s_conf = config['sensors'][str(addr)]
