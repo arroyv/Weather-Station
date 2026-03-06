@@ -29,7 +29,7 @@ def load_config(path='config.json'):
 
 def get_dynamic_db_path(config):
     try:
-        username = os.getlogin()
+        username = os.getenv('SUDO_USER') or os.getenv('USER') or os.getlogin()
         db_config = config.get('database', {})
         drive_label = db_config.get('drive_label')
         
