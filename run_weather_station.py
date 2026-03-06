@@ -1,7 +1,9 @@
 # run_weather_station.py
 import os
+import sys
 import time
 import json
+import signal
 import argparse
 from dotenv import load_dotenv
 from Adafruit_IO import Client
@@ -27,7 +29,7 @@ def load_config(path='config.json'):
 
 def get_dynamic_db_path(config):
     try:
-        username = os.getlogin()
+        username = os.getenv('SUDO_USER') or os.getenv('USER') or os.getlogin()
         db_config = config.get('database', {})
         drive_label = db_config.get('drive_label')
         
@@ -126,26 +128,34 @@ if __name__ == "__main__":
 
     stop_event = Event()
 
-    try:
-        weather_station.start()
-        for service in all_services:
-            service.start()
-        
-        watcher_thread = Thread(target=config_watcher_loop, args=('config.json', weather_station, all_services, stop_event), daemon=True)
-        watcher_thread.start()
-            
-        print("\n--- All Services are Running --- (Press Ctrl+C to stop)")
-        while True:
-            time.sleep(1)
-            
-    except KeyboardInterrupt:
-        print("\nShutting down gracefully...")
+    def graceful_shutdown(signum=None, frame=None):
+        sig_name = signal.Signals(signum).name if signum else "unknown"
+        print(f"\nReceived {sig_name}, shutting down gracefully...")
         stop_event.set()
         weather_station.stop()
         for service in all_services:
             service.stop()
         db_manager.close()
         print("Shutdown complete.")
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, graceful_shutdown)
+    signal.signal(signal.SIGINT, graceful_shutdown)
+
+    try:
+        weather_station.start()
+        for service in all_services:
+            service.start()
+
+        watcher_thread = Thread(target=config_watcher_loop, args=('config.json', weather_station, all_services, stop_event), daemon=True)
+        watcher_thread.start()
+
+        print("\n--- All Services are Running --- (Press Ctrl+C to stop)")
+        while True:
+            time.sleep(1)
+
+    except SystemExit:
+        pass  # Already handled by signal handler
     except Exception as e:
         print(f"An unexpected error occurred: {e}")
         stop_event.set()

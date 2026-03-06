@@ -28,9 +28,11 @@ class WeatherStation:
         self.config = initial_config
         self.station_id = self.config.get('station_info', {}).get('station_id', 0)
 
-    def discover_and_add_sensors(self):
+    def discover_and_add_sensors(self, max_attempts=5, attempt_delay=10):
         """
         Scans for and initializes all sensors defined and enabled in the configuration.
+        Retries the full discovery if no Modbus sensors are found, to handle cases
+        where USB serial devices are not yet available (e.g. on boot).
         """
         if not HARDWARE_AVAILABLE:
             print("  [Discovery] Skipped due to missing hardware libraries.")
@@ -40,21 +42,37 @@ class WeatherStation:
         ports_to_scan = ['/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyACM2', '/dev/ttyACM3', '/dev/ttyACM4', '/dev/ttyACM5', '/dev/ttyACM6', '/dev/ttyACM7', '/dev/ttyUSB0', '/dev/ttyUSB1', '/dev/ttyUSB2',
                          '/dev/ttyUSB3', '/dev/ttyUSB4', '/dev/ttyUSB5', '/dev/ttyUSB6', '/dev/ttyUSB7', '/dev/ttyCH9344USB0', '/dev/ttyCH9344USB1', '/dev/ttyCH9344USB2', '/dev/ttyCH9344USB3',
                          '/dev/ttyCH9344USB4', '/dev/ttyCH9344USB5', '/dev/ttyCH9344USB6', '/dev/ttyCH9344USB7']
-        
-        print("  [Discovery] Performing initial discovery of Modbus sensors...")
+
+        enabled_sensors = {addr_str: s_conf for addr_str, s_conf in config.get('sensors', {}).items() if s_conf.get('enabled', False)}
+
         logging.basicConfig(level=logging.INFO)
-        logging.info("Sensor discovery has started.")
         found_addrs = {}
-        for addr_str, s_conf in config.get('sensors', {}).items():
-            if not s_conf.get('enabled', False):
-                continue
-            addr = int(addr_str)
-            for port in ports_to_scan:
-                if os.path.exists(port) and self._test_sensor_at_location(port, addr):
-                    print(f"  [Discovery] Found '{s_conf['name']}' (addr {addr}) on {port}")
-                    found_addrs[addr] = port
-                    break
-        
+
+        for attempt in range(1, max_attempts + 1):
+            print(f"  [Discovery] Attempt {attempt}/{max_attempts}: Scanning for Modbus sensors...")
+            logging.info("Sensor discovery has started.")
+
+            for addr_str, s_conf in enabled_sensors.items():
+                if int(addr_str) in found_addrs:
+                    continue
+                addr = int(addr_str)
+                for port in ports_to_scan:
+                    if os.path.exists(port) and self._test_sensor_at_location(port, addr):
+                        print(f"  [Discovery] Found '{s_conf['name']}' (addr {addr}) on {port}")
+                        found_addrs[addr] = port
+                        break
+
+            if len(found_addrs) >= len(enabled_sensors):
+                break
+
+            if attempt < max_attempts:
+                missing = [s_conf['name'] for addr_str, s_conf in enabled_sensors.items() if int(addr_str) not in found_addrs]
+                print(f"  [Discovery] Missing sensors: {', '.join(missing)}. Retrying in {attempt_delay}s...")
+                time.sleep(attempt_delay)
+
+        if not found_addrs and enabled_sensors:
+            print("  [Discovery] WARNING: No Modbus sensors were found after all attempts.")
+
         for addr, port in found_addrs.items():
             s_conf = config['sensors'][str(addr)]
             sensor = ModbusSensor(port, addr, s_conf, lock=self.shared_modbus_lock, db_manager=self.db_manager, station_id=self.station_id, debug=True)
@@ -108,17 +126,21 @@ class WeatherStation:
                     print(f"[Config Update] Warning: No config found for running sensor '{sensor.name}'. It may become disabled.")
 
 
-    def _test_sensor_at_location(self, port, address):
+    def _test_sensor_at_location(self, port, address, retries=3, delay=2):
         """Tests for the presence of a Modbus device at a specific port and address."""
-        try:
-            with self.shared_modbus_lock:
-                inst = minimalmodbus.Instrument(port, address)
-                inst.serial.baudrate = 4800
-                inst.serial.timeout = 1.0
-                inst.read_register(0, 0) # Try reading a common register
-            return True
-        except (IOError, ValueError):
-            return False
+        for attempt in range(retries):
+            try:
+                with self.shared_modbus_lock:
+                    inst = minimalmodbus.Instrument(port, address)
+                    inst.serial.baudrate = 4800
+                    inst.serial.timeout = 1.0
+                    inst.read_register(0, 0) # Try reading a common register
+                    inst.serial.close()
+                return True
+            except (IOError, ValueError):
+                if attempt < retries - 1:
+                    time.sleep(delay)
+        return False
 
 class ModbusSensor:
     """
