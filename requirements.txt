@@ -4,3 +4,4 @@ minimalmodbus
 gpiozero
 python-dotenv
 flask
+gunicorn
