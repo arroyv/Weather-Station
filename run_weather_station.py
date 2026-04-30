@@ -39,8 +39,12 @@ def get_dynamic_db_path(config):
             
         path = os.path.join('/media', username, drive_label, db_filename)
         
-        if not os.path.exists(os.path.dirname(path)):
-            print(f"[Warning] Database directory not found: {os.path.dirname(path)}")
+        if not os.path.ismount(os.path.dirname(path)):
+            print(f"[Warning] USB drive not mounted at {os.path.dirname(path)}. Falling back to SD card storage")
+            fallback_dir = os.path.join(os.getcwd(), "data")
+            os.makedirs(fallback_dir, exist_ok=True)
+            fallback_path = os.path.join(fallback_dir, db_filename)
+            return fallback_path
             
         return path
     except Exception as e:
